@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Saucy Steve the Skateboarding Sloth</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="layout">
+      <section class="hud" aria-label="Game HUD">
+        <h1>Saucy Steve the Skateboarding Sloth</h1>
+        <div class="stats">
+          <p>Score: <span id="scoreValue">0</span></p>
+          <p>Tickets: <span id="ticketValue">0</span></p>
+          <p>State: <span id="stateValue">Hub</span></p>
+          <p>Ride: <span id="rideValue">Skateboard</span></p>
+          <p>Combo: <span id="comboValue">None</span></p>
+        </div>
+        <div id="messageBox" class="message">Skate the city and rack up points to earn tickets.</div>
+        <details open>
+          <summary>Controls</summary>
+          <ul>
+            <li>Move: WASD or Arrow keys (supports 8-direction)</li>
+            <li>Push for speed: K</li>
+            <li>Ollie/Jump: J</li>
+            <li>Spin: L (best while airborne)</li>
+            <li>Switch ride: Z (previous), X (next)</li>
+            <li>Enter competition zone: E</li>
+            <li>Return to hub (in competition): R</li>
+          </ul>
+        </details>
+      </section>
+
+      <section class="game-wrap" aria-label="Game viewport">
+        <canvas id="gameCanvas" width="1100" height="700"></canvas>
+      </section>
+    </main>
+
+    <script type="module" src="src/main.js"></script>
+  </body>
+</html>
