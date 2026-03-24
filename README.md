@@ -154,3 +154,34 @@ Then open:
 ```text
 http://localhost:4173
 ```
+
+## Publish to GitHub Pages
+
+This repo is configured to deploy automatically with GitHub Actions when you push to `main`.
+
+### 1) Push this repository to GitHub
+
+Make sure your default branch is `main`, then push your project.
+
+### 2) Enable GitHub Pages to use Actions
+
+In your GitHub repository:
+
+1. Open **Settings → Pages**
+2. Under **Build and deployment**, set **Source** to **GitHub Actions**
+
+### 3) Trigger deployment
+
+Deployment runs automatically on every push to `main`.
+
+You can also run it manually from **Actions → Deploy Saucy Steve to GitHub Pages → Run workflow**.
+
+### 4) Open your live game URL
+
+After the workflow finishes, your game will be live at:
+
+```text
+https://<your-github-username>.github.io/<your-repo-name>/
+```
+
+This project uses relative paths in [`index.html`](index.html), so no additional base-path configuration is required for GitHub Pages.
