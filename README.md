@@ -170,6 +170,8 @@ In your GitHub repository:
 1. Open **Settings → Pages**
 2. Under **Build and deployment**, set **Source** to **GitHub Actions**
 
+The workflow at [`.github/workflows/deploy-pages.yml`](.github/workflows/deploy-pages.yml:1) also includes automatic enablement (`enablement: true`) to help first-time setup.
+
 ### 3) Trigger deployment
 
 Deployment runs automatically on every push to `main`.
