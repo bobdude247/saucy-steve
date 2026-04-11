@@ -261,9 +261,9 @@ const player = {
   radius: 15,
   heading: 0,
   speed: 0,
-  maxSpeed: 355,
+  maxSpeed: 460,
   accel: 360,
-  friction: 2.6,
+  friction: 1.7,
   turnRate: 7,
   onGround: true,
   z: 0,
@@ -456,17 +456,11 @@ function applyMovementHub(dt) {
   }
 
   if (consumeAny(['KeyK', 'PadPush']) && player.pushCooldown <= 0 && player.onGround) {
-    const pushPower = 132 * ride.accelMult;
+    const pushPower = 192 * ride.accelMult;
     player.vx += Math.cos(player.heading) * pushPower;
     player.vy += Math.sin(player.heading) * pushPower;
-    player.pushCooldown = 0.18;
+    player.pushCooldown = 0.12;
     setMessage('Push! Keep building speed.', 1.2);
-  }
-
-  if (move.length > 0 && player.onGround) {
-    const accel = player.accel * ride.accelMult;
-    player.vx += Math.cos(player.heading) * accel * dt * 0.45;
-    player.vy += Math.sin(player.heading) * accel * dt * 0.45;
   }
 
   const rideMaxSpeed = player.maxSpeed * ride.maxSpeedMult;
