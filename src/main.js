@@ -24,7 +24,9 @@ const game = {
   cameraX: 0,
   cameraY: 0,
   competitionStartY: 0,
-  rideIndex: 0
+  rideIndex: 0,
+  competitionResult: null,
+  resultsTimer: 0
 };
 
 const rides = [
@@ -88,6 +90,29 @@ const input = {
   }
 };
 
+const gamepad = {
+  connected: false,
+  lastConnected: false,
+  index: 0,
+  axes: { lx: 0, ly: 0 },
+  buttonPressed: new Set(),
+  deadzone: 0.2
+};
+
+const padBindings = {
+  jump: { button: 0, code: 'PadJump' },
+  spin: { button: 2, code: 'PadSpin' },
+  enter: { button: 3, code: 'PadEnter' },
+  push: { button: 7, code: 'PadPush' },
+  returnHub: { button: 9, code: 'PadReturn' },
+  ridePrev: { button: 4, code: 'PadRidePrev' },
+  rideNext: { button: 5, code: 'PadRideNext' },
+  dLeft: { button: 14, code: 'PadDLeft' },
+  dRight: { button: 15, code: 'PadDRight' },
+  dUp: { button: 12, code: 'PadDUp' },
+  dDown: { button: 13, code: 'PadDDown' }
+};
+
 const world = {
   width: 2800,
   height: 1800,
@@ -108,19 +133,20 @@ const world = {
     { x: 2060, y: 1480, w: 560, h: 250, color: '#4b627f' }
   ],
   parkedCars: [
-    { x: 880, y: 705, w: 68, h: 32, color: '#f07d5d' },
-    { x: 960, y: 1020, w: 68, h: 32, color: '#76d3ff' },
-    { x: 1435, y: 520, w: 32, h: 66, color: '#9bff7a' },
-    { x: 1090, y: 1085, w: 32, h: 66, color: '#ffd66c' }
+    { x: 860, y: 688, w: 112, h: 48, color: '#f07d5d', orientation: 'horizontal', platformHeight: 11 },
+    { x: 940, y: 995, w: 112, h: 48, color: '#76d3ff', orientation: 'horizontal', platformHeight: 11 },
+    { x: 1420, y: 500, w: 50, h: 112, color: '#9bff7a', orientation: 'vertical', platformHeight: 11 },
+    { x: 1072, y: 1062, w: 50, h: 112, color: '#ffd66c', orientation: 'vertical', platformHeight: 11 }
   ],
   railSegments: [
     { x1: 700, y1: 620, x2: 1020, y2: 620 },
     { x1: 1550, y1: 1170, x2: 1900, y2: 1170 }
   ],
   ramps: [
-    { x: 520, y: 500, w: 170, h: 130 },
-    { x: 1310, y: 620, w: 220, h: 170 },
-    { x: 1930, y: 1330, w: 260, h: 180 }
+    { x: 470, y: 470, w: 220, h: 120, dir: 'right', height: 22 },
+    { x: 1230, y: 590, w: 290, h: 140, dir: 'right', height: 26 },
+    { x: 1830, y: 1270, w: 320, h: 170, dir: 'left', height: 30 },
+    { x: 890, y: 1190, w: 250, h: 130, dir: 'up', height: 24 }
   ],
   zones: [
     { key: 'halfpipe', name: 'Halfpipe Competition', x: 250, y: 340, w: 320, h: 210, color: '#9b74ff', ticketCost: 1 },
@@ -134,75 +160,96 @@ const competitionMaps = {
   halfpipe: {
     key: 'halfpipe',
     name: 'Halfpipe Competition',
-    duration: 34,
-    target: 620,
+    length: 2400,
     gravityAssist: 0,
     laneCenterX: canvas.width * 0.5,
-    laneWidth: 470,
+    laneWidth: 520,
+    medals: { bronze: 620, silver: 880, gold: 1140 },
     segments: [
-      { yStart: 0, yEnd: 1500, centerX: canvas.width * 0.5 }
+      { yStart: 0, yEnd: 500, centerX: canvas.width * 0.5 - 36 },
+      { yStart: 500, yEnd: 1000, centerX: canvas.width * 0.5 + 36 },
+      { yStart: 1000, yEnd: 1500, centerX: canvas.width * 0.5 - 28 },
+      { yStart: 1500, yEnd: 2000, centerX: canvas.width * 0.5 + 30 },
+      { yStart: 2000, yEnd: 2400, centerX: canvas.width * 0.5 }
     ],
     gates: [],
-    jumps: [380, 760, 1140]
+    jumps: [280, 620, 960, 1300, 1670, 2050]
   },
   downhill: {
     key: 'downhill',
     name: 'Downhill Competition',
-    duration: 30,
-    target: 700,
+    length: 2500,
     gravityAssist: 220,
     laneCenterX: canvas.width * 0.5,
-    laneWidth: 380,
+    laneWidth: 390,
+    medals: { bronze: 760, silver: 1020, gold: 1320 },
     segments: [
-      { yStart: 0, yEnd: 420, centerX: 600 },
-      { yStart: 420, yEnd: 870, centerX: 520 },
-      { yStart: 870, yEnd: 1270, centerX: 660 },
-      { yStart: 1270, yEnd: 1600, centerX: 540 }
+      { yStart: 0, yEnd: 360, centerX: 560 },
+      { yStart: 360, yEnd: 740, centerX: 650 },
+      { yStart: 740, yEnd: 1120, centerX: 510 },
+      { yStart: 1120, yEnd: 1500, centerX: 690 },
+      { yStart: 1500, yEnd: 1900, centerX: 520 },
+      { yStart: 1900, yEnd: 2260, centerX: 640 },
+      { yStart: 2260, yEnd: 2500, centerX: 580 }
     ],
     gates: [],
-    jumps: [530, 960, 1360]
+    jumps: [420, 860, 1260, 1740, 2160]
   },
   slalom: {
     key: 'slalom',
     name: 'Slalom Competition',
-    duration: 32,
-    target: 760,
+    length: 2500,
     gravityAssist: 170,
     laneCenterX: canvas.width * 0.5,
     laneWidth: 420,
+    medals: { bronze: 820, silver: 1100, gold: 1400 },
     segments: [
-      { yStart: 0, yEnd: 360, centerX: 560 },
-      { yStart: 360, yEnd: 760, centerX: 640 },
-      { yStart: 760, yEnd: 1140, centerX: 520 },
-      { yStart: 1140, yEnd: 1600, centerX: 620 }
+      { yStart: 0, yEnd: 320, centerX: 540 },
+      { yStart: 320, yEnd: 640, centerX: 680 },
+      { yStart: 640, yEnd: 960, centerX: 500 },
+      { yStart: 960, yEnd: 1280, centerX: 700 },
+      { yStart: 1280, yEnd: 1600, centerX: 500 },
+      { yStart: 1600, yEnd: 1920, centerX: 690 },
+      { yStart: 1920, yEnd: 2240, centerX: 530 },
+      { yStart: 2240, yEnd: 2500, centerX: 620 }
     ],
     gates: [
-      { y: 260, x: 470, side: 'left' },
-      { y: 420, x: 690, side: 'right' },
-      { y: 590, x: 440, side: 'left' },
-      { y: 760, x: 700, side: 'right' },
-      { y: 930, x: 450, side: 'left' },
-      { y: 1100, x: 700, side: 'right' },
-      { y: 1270, x: 470, side: 'left' }
+      { y: 220, x: 440, side: 'left' },
+      { y: 360, x: 720, side: 'right' },
+      { y: 510, x: 420, side: 'left' },
+      { y: 670, x: 730, side: 'right' },
+      { y: 830, x: 405, side: 'left' },
+      { y: 980, x: 745, side: 'right' },
+      { y: 1130, x: 415, side: 'left' },
+      { y: 1290, x: 740, side: 'right' },
+      { y: 1450, x: 410, side: 'left' },
+      { y: 1600, x: 750, side: 'right' },
+      { y: 1760, x: 420, side: 'left' },
+      { y: 1910, x: 745, side: 'right' },
+      { y: 2070, x: 430, side: 'left' },
+      { y: 2230, x: 735, side: 'right' }
     ],
-    jumps: [650, 1230]
+    jumps: [760, 1540, 2140]
   },
   jump: {
     key: 'jump',
     name: 'Jump Competition',
-    duration: 30,
-    target: 680,
+    length: 2500,
     gravityAssist: 180,
     laneCenterX: canvas.width * 0.5,
-    laneWidth: 390,
+    laneWidth: 410,
+    medals: { bronze: 860, silver: 1140, gold: 1450 },
     segments: [
-      { yStart: 0, yEnd: 380, centerX: 560 },
-      { yStart: 380, yEnd: 740, centerX: 520 },
-      { yStart: 740, yEnd: 1040, centerX: 620 },
-      { yStart: 1040, yEnd: 1600, centerX: 580 }
+      { yStart: 0, yEnd: 340, centerX: 560 },
+      { yStart: 340, yEnd: 680, centerX: 520 },
+      { yStart: 680, yEnd: 1020, centerX: 650 },
+      { yStart: 1020, yEnd: 1360, centerX: 540 },
+      { yStart: 1360, yEnd: 1700, centerX: 670 },
+      { yStart: 1700, yEnd: 2060, centerX: 520 },
+      { yStart: 2060, yEnd: 2500, centerX: 600 }
     ],
     gates: [],
-    jumps: [280, 520, 820, 1150, 1420]
+    jumps: [220, 460, 720, 980, 1240, 1500, 1780, 2060, 2320]
   }
 };
 
@@ -227,8 +274,12 @@ const player = {
   spinWindow: 0,
   spinValue: 0,
   grinding: false,
-  gatedPassed: new Set()
+  gatedPassed: new Set(),
+  surfaceLift: 0,
+  lastRampLaunch: -1
 };
+
+const HUB_SPAWN = { x: 1040, y: 860 };
 
 let lastTime = performance.now();
 
@@ -243,6 +294,75 @@ window.addEventListener('keydown', (event) => {
 window.addEventListener('keyup', (event) => {
   input.pressed.delete(event.code);
 });
+
+function applyDeadzone(value, deadzone = gamepad.deadzone) {
+  if (Math.abs(value) < deadzone) return 0;
+  const normalized = (Math.abs(value) - deadzone) / (1 - deadzone);
+  return Math.sign(value) * Math.min(1, normalized);
+}
+
+function syncPadButtonState(code, isDown) {
+  if (isDown) {
+    if (!input.pressed.has(code)) {
+      input.justPressed.add(code);
+    }
+    input.pressed.add(code);
+  } else {
+    input.pressed.delete(code);
+  }
+}
+
+function updateGamepadInput() {
+  if (!navigator.getGamepads) return;
+  const pads = navigator.getGamepads();
+  const activePad = pads[gamepad.index] || [...pads].find((pad) => pad);
+
+  if (!activePad) {
+    gamepad.connected = false;
+    gamepad.axes.lx = 0;
+    gamepad.axes.ly = 0;
+    for (const binding of Object.values(padBindings)) {
+      syncPadButtonState(binding.code, false);
+    }
+    gamepad.buttonPressed.clear();
+  } else {
+    gamepad.connected = true;
+    gamepad.index = activePad.index;
+    gamepad.axes.lx = applyDeadzone(activePad.axes[0] ?? 0);
+    gamepad.axes.ly = applyDeadzone(activePad.axes[1] ?? 0);
+
+    for (const binding of Object.values(padBindings)) {
+      const btn = activePad.buttons[binding.button];
+      const isDown = Boolean(btn?.pressed || (btn?.value ?? 0) > 0.55);
+      syncPadButtonState(binding.code, isDown);
+      if (isDown) {
+        gamepad.buttonPressed.add(binding.button);
+      } else {
+        gamepad.buttonPressed.delete(binding.button);
+      }
+    }
+  }
+
+  if (gamepad.connected !== gamepad.lastConnected) {
+    if (gamepad.connected) {
+      setMessage('Controller connected: Left stick steer, R2 push, X jump, Square spin.', 2.4);
+    } else {
+      setMessage('Controller disconnected. Keyboard controls still active.', 2.2);
+    }
+    gamepad.lastConnected = gamepad.connected;
+  }
+}
+
+function consumeAny(codes) {
+  for (const code of codes) {
+    if (input.consume(code)) return true;
+  }
+  return false;
+}
+
+function isDownAny(codes) {
+  return codes.some((code) => input.isDown(code));
+}
 
 function setMessage(text, duration = 2.5) {
   ui.message.textContent = text;
@@ -280,13 +400,18 @@ function addScore(points, comboName) {
 }
 
 function getMoveVector() {
-  const left = input.isDown('KeyA') || input.isDown('ArrowLeft');
-  const right = input.isDown('KeyD') || input.isDown('ArrowRight');
-  const up = input.isDown('KeyW') || input.isDown('ArrowUp');
-  const down = input.isDown('KeyS') || input.isDown('ArrowDown');
+  const left = isDownAny(['KeyA', 'ArrowLeft', 'PadDLeft']);
+  const right = isDownAny(['KeyD', 'ArrowRight', 'PadDRight']);
+  const up = isDownAny(['KeyW', 'ArrowUp', 'PadDUp']);
+  const down = isDownAny(['KeyS', 'ArrowDown', 'PadDDown']);
 
-  const mx = (right ? 1 : 0) - (left ? 1 : 0);
-  const my = (down ? 1 : 0) - (up ? 1 : 0);
+  let mx = (right ? 1 : 0) - (left ? 1 : 0);
+  let my = (down ? 1 : 0) - (up ? 1 : 0);
+
+  mx += gamepad.axes.lx;
+  my += gamepad.axes.ly;
+  mx = Math.max(-1, Math.min(1, mx));
+  my = Math.max(-1, Math.min(1, my));
 
   if (mx === 0 && my === 0) {
     return { x: 0, y: 0, length: 0 };
@@ -330,7 +455,7 @@ function applyMovementHub(dt) {
     player.heading = angleLerp(player.heading, targetHeading, player.turnRate * ride.turnMult, dt);
   }
 
-  if (input.consume('KeyK') && player.pushCooldown <= 0 && player.onGround) {
+  if (consumeAny(['KeyK', 'PadPush']) && player.pushCooldown <= 0 && player.onGround) {
     const pushPower = 132 * ride.accelMult;
     player.vx += Math.cos(player.heading) * pushPower;
     player.vy += Math.sin(player.heading) * pushPower;
@@ -363,12 +488,65 @@ function applyMovementHub(dt) {
   player.y = Math.max(player.radius, Math.min(world.height - player.radius, player.y));
 }
 
+function getRampProgress(ramp) {
+  if (ramp.dir === 'right') return (player.x - ramp.x) / ramp.w;
+  if (ramp.dir === 'left') return (ramp.x + ramp.w - player.x) / ramp.w;
+  if (ramp.dir === 'up') return (ramp.y + ramp.h - player.y) / ramp.h;
+  return (player.y - ramp.y) / ramp.h;
+}
+
+function updateHubSurfaceFeatures() {
+  if (!player.onGround) {
+    player.surfaceLift = 0;
+    return;
+  }
+
+  let lift = 0;
+  let touchingRamp = false;
+  for (let i = 0; i < world.ramps.length; i += 1) {
+    const ramp = world.ramps[i];
+    const inside = player.x >= ramp.x && player.x <= ramp.x + ramp.w && player.y >= ramp.y && player.y <= ramp.y + ramp.h;
+    if (!inside) continue;
+
+    touchingRamp = true;
+    const progress = Math.max(0, Math.min(1, getRampProgress(ramp)));
+    const rampLift = Math.sin(progress * Math.PI * 0.5) * ramp.height;
+    lift = Math.max(lift, rampLift);
+
+    if (progress > 0.92 && player.speed > 180 && player.lastRampLaunch !== i) {
+      const ride = getCurrentRide();
+      player.vz = 250 * ride.jumpMult;
+      player.onGround = false;
+      player.lastRampLaunch = i;
+      addScore(24 * ride.trickMult, 'Ramp launch +24');
+      setMessage('Launch! Hit L in the air for extra points.', 1.1);
+    }
+  }
+
+  if (!touchingRamp) {
+    player.lastRampLaunch = -1;
+  }
+
+  for (const car of world.parkedCars) {
+    const platformInset = 10;
+    const onTop = player.x >= car.x + platformInset &&
+      player.x <= car.x + car.w - platformInset &&
+      player.y >= car.y + platformInset &&
+      player.y <= car.y + car.h - platformInset;
+    if (onTop) {
+      lift = Math.max(lift, car.platformHeight);
+    }
+  }
+
+  player.surfaceLift = lift;
+}
+
 function applyMovementCompetition(dt) {
   const ride = getCurrentRide();
   const move = getMoveVector();
   const turnStrength = 310 * ride.turnMult;
 
-  if (input.consume('KeyK') && player.pushCooldown <= 0 && player.onGround) {
+  if (consumeAny(['KeyK', 'PadPush']) && player.pushCooldown <= 0 && player.onGround) {
     player.vy += 90 * ride.accelMult;
     player.pushCooldown = 0.2;
     setMessage('Pushing into the line!', 0.8);
@@ -403,15 +581,15 @@ function applyMovementCompetition(dt) {
     player.vx *= -0.25;
   }
 
-  if (player.y > 1600) {
-    player.y = 1600;
+  if (player.y > game.competition.map.length) {
+    player.y = game.competition.map.length;
     player.vy = 220;
   }
 }
 
 function performTricks(dt) {
   const ride = getCurrentRide();
-  if (input.consume('KeyJ') && player.onGround && player.trickCooldown <= 0) {
+  if (consumeAny(['KeyJ', 'PadJump']) && player.onGround && player.trickCooldown <= 0) {
     const basePop = game.mode === 'competition' ? 340 : 380;
     player.vz = basePop * ride.jumpMult;
     player.onGround = false;
@@ -423,7 +601,7 @@ function performTricks(dt) {
     setMessage('Ollie! Press L in the air to spin.', 1.1);
   }
 
-  if (input.consume('KeyL')) {
+  if (consumeAny(['KeyL', 'PadSpin'])) {
     if (!player.onGround && player.spinWindow > 0) {
       player.spinValue += 180;
       const basePoints = game.mode === 'competition' ? 52 : 45;
@@ -481,8 +659,7 @@ function getCurrentZone() {
 function updateCompetition(dt) {
   if (!game.competition) return;
   const map = game.competition.map;
-
-  game.competition.timeLeft -= dt;
+  game.competition.runTime += dt;
 
   for (let i = 0; i < map.gates.length; i += 1) {
     const gate = map.gates[i];
@@ -497,27 +674,70 @@ function updateCompetition(dt) {
     }
   }
 
-  if (input.consume('KeyR')) {
+  for (let i = 0; i < map.jumps.length; i += 1) {
+    const jumpY = map.jumps[i];
+    if (game.competition.jumpedPads.has(i)) continue;
+    if (Math.abs(player.y - jumpY) <= 18 && player.onGround) {
+      const ride = getCurrentRide();
+      player.vz = Math.max(player.vz, 320 * ride.jumpMult);
+      player.onGround = false;
+      game.competition.jumpedPads.add(i);
+      addScore(35 * ride.trickMult, 'Course jump +35');
+    }
+  }
+
+  if (consumeAny(['KeyR', 'PadReturn'])) {
     game.mode = 'hub';
     game.competition = null;
-    player.x = 1040;
-    player.y = 860;
+    game.competitionResult = null;
+    player.x = HUB_SPAWN.x;
+    player.y = HUB_SPAWN.y;
     setMessage('Returned to city hub.', 1.5);
     return;
   }
 
-  if (game.competition.timeLeft <= 0) {
-    const reached = game.competition.points >= game.competition.target;
-    if (reached) {
-      game.tickets += 1;
-      setMessage('Competition cleared! Bonus ticket +1', 3.2);
-    } else {
-      setMessage('Competition ended. Keep training in the hub.', 3.2);
+  if (player.y >= map.length - 70) {
+    let finalPoints = game.competition.points;
+    let timeBonus = 0;
+    if (map.key === 'downhill') {
+      timeBonus = Math.max(120, Math.round(900 - game.competition.runTime * 22));
+      addScore(timeBonus, `Speed bonus +${timeBonus}`);
+      finalPoints = game.competition.points;
     }
-    game.mode = 'hub';
-    game.competition = null;
-    player.x = 1040;
-    player.y = 860;
+
+    const medalCuts = map.medals;
+    let placement = 4;
+    let medal = 'No Medal';
+    if (finalPoints >= medalCuts.gold) {
+      placement = 1;
+      medal = 'Gold';
+    } else if (finalPoints >= medalCuts.silver) {
+      placement = 2;
+      medal = 'Silver';
+    } else if (finalPoints >= medalCuts.bronze) {
+      placement = 3;
+      medal = 'Bronze';
+    }
+
+    const earnedTicket = placement === 1 ? 1 : 0;
+    game.tickets += earnedTicket;
+    game.mode = 'results';
+    game.resultsTimer = 4.8;
+    game.competitionResult = {
+      competitionName: game.competition.name,
+      points: Math.floor(finalPoints),
+      placement,
+      medal,
+      runTime: game.competition.runTime,
+      timeBonus,
+      earnedTicket
+    };
+    setMessage(
+      placement === 1
+        ? `1st Place! ${medal} medal and +1 ticket earned!`
+        : `${medal} medal - ${placement === 4 ? 'keep pushing for podium.' : `placed #${placement}`}`,
+      4.2
+    );
   }
 }
 
@@ -536,9 +756,9 @@ function tryEnterCompetition() {
     key: zone.key,
     name: zone.name,
     map,
-    timeLeft: map.duration,
+    runTime: 0,
     points: 0,
-    target: map.target
+    jumpedPads: new Set()
   };
 
   resetPlayerStateForCompetition();
@@ -547,14 +767,16 @@ function tryEnterCompetition() {
   player.heading = Math.PI / 2;
   player.vy = 170;
   game.competitionStartY = player.y;
-  setMessage(`Entered ${zone.name}. Follow the course and hit ${map.target} points!`, 3);
+  setMessage(`Entered ${zone.name}. Finish strong for a medal. Gold = 1st place +1 ticket!`, 3.2);
 }
 
 function update(dt) {
-  if (input.consume('KeyZ')) {
+  updateGamepadInput();
+
+  if (consumeAny(['KeyZ', 'PadRidePrev'])) {
     switchRide(-1);
   }
-  if (input.consume('KeyX')) {
+  if (consumeAny(['KeyX', 'PadRideNext'])) {
     switchRide(1);
   }
 
@@ -564,21 +786,40 @@ function update(dt) {
 
   if (game.mode === 'hub') {
     applyMovementHub(dt);
-  } else {
+    updateHubSurfaceFeatures();
+  } else if (game.mode === 'competition') {
     applyMovementCompetition(dt);
+    player.surfaceLift = 0;
+  } else {
+    player.vx *= Math.max(0, 1 - 4.2 * dt);
+    player.vy *= Math.max(0, 1 - 4.2 * dt);
+    player.surfaceLift = 0;
   }
 
   player.speed = Math.hypot(player.vx, player.vy);
 
-  performTricks(dt);
+  if (game.mode !== 'results') {
+    performTricks(dt);
+  }
   updateVertical(dt);
 
-  if (input.consume('KeyE') && game.mode === 'hub') {
+  if (consumeAny(['KeyE', 'PadEnter']) && game.mode === 'hub') {
     tryEnterCompetition();
   }
 
   if (game.mode === 'competition') {
     updateCompetition(dt);
+  } else if (game.mode === 'results') {
+    game.resultsTimer = Math.max(0, game.resultsTimer - dt);
+    if (game.resultsTimer <= 0) {
+      game.mode = 'hub';
+      game.competition = null;
+      game.competitionResult = null;
+      player.x = HUB_SPAWN.x;
+      player.y = HUB_SPAWN.y;
+      player.surfaceLift = 0;
+      setMessage('Back in the city. Enter another event to win more tickets.', 2.8);
+    }
   }
 
   if (game.messageTimer === 0 && ui.message.textContent !== HUB_MESSAGE) {
@@ -590,7 +831,9 @@ function update(dt) {
   ui.ride.textContent = getCurrentRide().name;
   ui.state.textContent = game.mode === 'hub'
     ? 'Hub'
-    : `${game.competition.name} (${Math.ceil(game.competition.timeLeft)}s)`;
+    : game.mode === 'competition'
+      ? `${game.competition.name}`
+      : `Results: ${game.competitionResult?.medal ?? 'Done'}`;
   ui.combo.textContent = player.grinding ? 'Grinding +8/s' : game.currentCombo;
 }
 
@@ -646,13 +889,22 @@ function drawCityBackground() {
   }
 
   for (const car of world.parkedCars) {
+    const roofInset = 10;
+    ctx.fillStyle = '#202836';
+    ctx.fillRect(car.x + 4, car.y + 6, car.w - 8, car.h - 8);
     ctx.fillStyle = car.color;
-    ctx.fillRect(car.x, car.y, car.w, car.h);
+    ctx.fillRect(car.x, car.y, car.w, car.h - 6);
+    ctx.fillStyle = '#ffffff22';
+    ctx.fillRect(car.x + roofInset, car.y + 8, car.w - roofInset * 2, car.h - 24);
     ctx.fillStyle = '#111927';
-    if (car.w > car.h) {
-      ctx.fillRect(car.x + 10, car.y + 7, car.w - 20, car.h - 14);
+    if (car.orientation === 'horizontal') {
+      ctx.fillRect(car.x + 12, car.y + car.h - 10, 18, 8);
+      ctx.fillRect(car.x + car.w - 30, car.y + car.h - 10, 18, 8);
     } else {
-      ctx.fillRect(car.x + 7, car.y + 10, car.w - 14, car.h - 20);
+      ctx.fillRect(car.x + 4, car.y + 12, 8, 18);
+      ctx.fillRect(car.x + 4, car.y + car.h - 30, 8, 18);
+      ctx.fillRect(car.x + car.w - 12, car.y + 12, 8, 18);
+      ctx.fillRect(car.x + car.w - 12, car.y + car.h - 30, 8, 18);
     }
   }
 }
@@ -683,39 +935,64 @@ function drawHubWorld() {
   }
 
   for (const ramp of world.ramps) {
-    ctx.fillStyle = '#3f4f6a';
+    const risingRight = ramp.dir === 'right';
+    const risingLeft = ramp.dir === 'left';
+    const risingUp = ramp.dir === 'up';
+    ctx.fillStyle = '#2b374a';
+    ctx.fillRect(ramp.x, ramp.y, ramp.w, ramp.h);
+    ctx.fillStyle = '#546883';
     ctx.beginPath();
-    ctx.moveTo(ramp.x, ramp.y + ramp.h);
-    ctx.lineTo(ramp.x + ramp.w, ramp.y + ramp.h);
-    ctx.lineTo(ramp.x + ramp.w, ramp.y);
+    if (risingRight) {
+      ctx.moveTo(ramp.x, ramp.y + ramp.h);
+      ctx.lineTo(ramp.x + ramp.w, ramp.y + ramp.h);
+      ctx.lineTo(ramp.x + ramp.w, ramp.y + 12);
+    } else if (risingLeft) {
+      ctx.moveTo(ramp.x, ramp.y + 12);
+      ctx.lineTo(ramp.x, ramp.y + ramp.h);
+      ctx.lineTo(ramp.x + ramp.w, ramp.y + ramp.h);
+    } else if (risingUp) {
+      ctx.moveTo(ramp.x, ramp.y + ramp.h);
+      ctx.lineTo(ramp.x + ramp.w, ramp.y + ramp.h);
+      ctx.lineTo(ramp.x + ramp.w - 12, ramp.y);
+      ctx.lineTo(ramp.x + 12, ramp.y);
+    } else {
+      ctx.moveTo(ramp.x, ramp.y);
+      ctx.lineTo(ramp.x + ramp.w, ramp.y);
+      ctx.lineTo(ramp.x + ramp.w - 12, ramp.y + ramp.h);
+      ctx.lineTo(ramp.x + 12, ramp.y + ramp.h);
+    }
     ctx.closePath();
     ctx.fill();
+    ctx.strokeStyle = '#8fb8ff';
+    ctx.lineWidth = 3;
+    ctx.strokeRect(ramp.x + 2, ramp.y + 2, ramp.w - 4, ramp.h - 4);
   }
 }
 
 function drawCompetitionCourse() {
   const map = game.competition.map;
+  const courseLength = map.length;
   ctx.fillStyle = '#192231';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  const cameraCourseY = Math.max(0, Math.min(1600 - canvas.height, player.y - canvas.height * 0.34));
+  const cameraCourseY = Math.max(0, Math.min(courseLength - canvas.height, player.y - canvas.height * 0.34));
   game.cameraY = cameraCourseY;
   game.cameraX = 0;
   ctx.save();
   ctx.translate(0, -cameraCourseY);
 
   ctx.fillStyle = '#31455d';
-  ctx.fillRect(0, 0, canvas.width, 1600);
+  ctx.fillRect(0, 0, canvas.width, courseLength);
 
   ctx.fillStyle = '#2f3137';
-  for (let y = 0; y < 1600; y += 14) {
+  for (let y = 0; y < courseLength; y += 14) {
     const centerX = getCompetitionCenterXForY(y);
     ctx.fillRect(centerX - map.laneWidth / 2, y, map.laneWidth, 11);
   }
 
   ctx.strokeStyle = '#d6ecff66';
   ctx.lineWidth = 4;
-  for (let y = 0; y < 1600; y += 24) {
+  for (let y = 0; y < courseLength; y += 24) {
     const centerX = getCompetitionCenterXForY(y);
     ctx.beginPath();
     ctx.moveTo(centerX - map.laneWidth / 2, y);
@@ -729,7 +1006,7 @@ function drawCompetitionCourse() {
 
   ctx.strokeStyle = '#f4ec8a';
   ctx.lineWidth = 4;
-  for (let y = 0; y < 1600; y += 48) {
+  for (let y = 0; y < courseLength; y += 48) {
     const centerX = getCompetitionCenterXForY(y);
     ctx.beginPath();
     ctx.moveTo(centerX, y);
@@ -750,11 +1027,24 @@ function drawCompetitionCourse() {
   }
 
   if (map.key === 'halfpipe') {
-    ctx.strokeStyle = '#9b74ff';
-    ctx.lineWidth = 8;
-    ctx.beginPath();
-    ctx.arc(map.laneCenterX, 1420, map.laneWidth / 2, Math.PI, 0);
-    ctx.stroke();
+    for (let y = 40; y < courseLength; y += 110) {
+      const centerX = getCompetitionCenterXForY(y);
+      const half = map.laneWidth / 2;
+      ctx.strokeStyle = '#8558ff';
+      ctx.lineWidth = 5;
+      ctx.beginPath();
+      ctx.arc(centerX - half + 52, y + 38, 52, Math.PI * 1.03, Math.PI * 1.95);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(centerX + half - 52, y + 38, 52, Math.PI * 1.05, Math.PI * -0.05, true);
+      ctx.stroke();
+      ctx.strokeStyle = '#c6b2ff';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(centerX - half + 4, y + 6);
+      ctx.lineTo(centerX + half - 4, y + 6);
+      ctx.stroke();
+    }
   }
 
   for (const gate of map.gates) {
@@ -767,7 +1057,30 @@ function drawCompetitionCourse() {
     ctx.stroke();
     ctx.fillStyle = '#f1f5ff';
     ctx.fillRect(gate.x - 14, gate.y - 26, 28, 8);
+    ctx.fillStyle = '#ff945f';
+    ctx.beginPath();
+    ctx.moveTo(gate.x - 30, gate.y + 24);
+    ctx.lineTo(gate.x - 20, gate.y + 4);
+    ctx.lineTo(gate.x - 10, gate.y + 24);
+    ctx.closePath();
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(gate.x + 30, gate.y + 24);
+    ctx.lineTo(gate.x + 20, gate.y + 4);
+    ctx.lineTo(gate.x + 10, gate.y + 24);
+    ctx.closePath();
+    ctx.fill();
   }
+
+  const finishY = courseLength - 70;
+  ctx.fillStyle = '#ffffff22';
+  for (let x = 0; x < canvas.width; x += 32) {
+    ctx.fillRect(x, finishY, 16, 12);
+    ctx.fillRect(x + 16, finishY + 12, 16, 12);
+  }
+  ctx.fillStyle = '#f7f8ff';
+  ctx.font = '18px sans-serif';
+  ctx.fillText('FINISH', 24, finishY - 8);
 
   drawPlayer();
   ctx.restore();
@@ -781,7 +1094,7 @@ function drawSlothSprite() {
   ctx.ellipse(player.x, player.y + 8, player.radius * 1.25 * shadowScale, player.radius * 0.6 * shadowScale, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  const drawY = player.y - player.z;
+  const drawY = player.y - (player.z + player.surfaceLift);
   ctx.save();
   ctx.translate(player.x, drawY);
   ctx.rotate(player.heading);
@@ -892,13 +1205,40 @@ function drawOverlay() {
 
   if (game.mode === 'competition' && game.competition) {
     ctx.fillStyle = 'rgba(5, 9, 15, 0.8)';
-    ctx.fillRect(canvas.width - 390, 16, 370, 86);
+    ctx.fillRect(canvas.width - 430, 16, 410, 104);
     ctx.fillStyle = '#f1f5ff';
     ctx.font = '18px sans-serif';
-    ctx.fillText(game.competition.name, canvas.width - 370, 40);
+    ctx.fillText(game.competition.name, canvas.width - 410, 40);
     ctx.font = '15px sans-serif';
-    ctx.fillText(`Score: ${Math.floor(game.competition.points)} / ${game.competition.target}`, canvas.width - 370, 62);
-    ctx.fillText(`Time: ${Math.ceil(game.competition.timeLeft)}s`, canvas.width - 370, 82);
+    const progress = Math.min(100, Math.round((player.y / game.competition.map.length) * 100));
+    ctx.fillText(`Score: ${Math.floor(game.competition.points)}`, canvas.width - 410, 62);
+    ctx.fillText(`Run Time: ${game.competition.runTime.toFixed(1)}s`, canvas.width - 410, 82);
+    ctx.fillText(`Course: ${progress}%`, canvas.width - 410, 102);
+  }
+
+  if (game.mode === 'results' && game.competitionResult) {
+    const result = game.competitionResult;
+    ctx.fillStyle = 'rgba(7, 12, 19, 0.82)';
+    ctx.fillRect(canvas.width * 0.5 - 240, 120, 480, 260);
+    ctx.strokeStyle = result.placement === 1 ? '#ffd66c' : '#9ec2ff';
+    ctx.lineWidth = 4;
+    ctx.strokeRect(canvas.width * 0.5 - 240, 120, 480, 260);
+    ctx.fillStyle = '#f8fbff';
+    ctx.font = '30px sans-serif';
+    ctx.fillText(result.placement === 1 ? '🏆 1st Place!' : `${result.medal}`, canvas.width * 0.5 - 140, 170);
+    ctx.font = '20px sans-serif';
+    ctx.fillText(`${result.competitionName}`, canvas.width * 0.5 - 185, 208);
+    ctx.fillText(`Points: ${result.points}`, canvas.width * 0.5 - 185, 236);
+    ctx.fillText(`Run Time: ${result.runTime.toFixed(2)}s`, canvas.width * 0.5 - 185, 262);
+    if (result.timeBonus > 0) {
+      ctx.fillText(`Speed Bonus: +${result.timeBonus}`, canvas.width * 0.5 - 185, 288);
+    }
+    ctx.fillStyle = result.earnedTicket > 0 ? '#9bff7a' : '#f3d3a6';
+    ctx.fillText(
+      result.earnedTicket > 0 ? '+1 Ticket for another park run!' : 'No ticket this run - go for Gold!',
+      canvas.width * 0.5 - 185,
+      322
+    );
   }
 }
 
