@@ -163,13 +163,20 @@ Implemented in this prototype:
   - **Downhill**: gravity-assisted one-path run with turns
   - **Slalom**: downhill run with gate hits for bonus score
   - **Jump**: downhill run with frequent jump features
-  - **Halfpipe**: dedicated arena with repeated jump opportunities
+  - **Halfpipe**: timed wall-to-wall session on a curved surface; `A`/`D` steer across the pipe, `K` pushes, `J` ollies, and `L` spins at the lips
 - Rails remain visual landmarks; contact-based grinding is deferred
 
 Ride-specific tuning currently included:
 
 - Unique acceleration, max speed, turn response, jump height, and trick scoring multipliers per ride type
 - Ride-aware rendering in the player sprite so vehicle silhouettes differ in gameplay
+
+Future direction, not implemented here:
+
+- Multiple characters with specialties without permanent vehicle restrictions
+- Vehicle shops, moving traffic, and other riders
+- Optional obstacle/challenge configurations selected by vehicle on entry
+- Permanent park identity and layout kept separate from optional configurations
 
 ## Run Locally
 

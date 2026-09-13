@@ -1,3 +1,10 @@
+import {
+  HALFPIPE_HALF_WIDTH,
+  createHalfpipeSession,
+  getSurfaceHeight,
+  stepHalfpipeSession
+} from './halfpipe.js';
+
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 
@@ -10,7 +17,27 @@ const ui = {
   message: document.getElementById('messageBox')
 };
 
+document.querySelectorAll('details').forEach((detail) => {
+  detail.open = false;
+});
+
 const HUB_MESSAGE = 'Skate the city and rack up points to earn tickets.';
+const HUB_VIEW = {
+  scaleX: 0.62,
+  scaleY: 0.30,
+  skewX: -0.22,
+  skewY: 0.18,
+  originX: 550,
+  originY: 35
+};
+let renderPlayerAnchor = null;
+
+function projectHubPoint(x, y, z = 0) {
+  return {
+    x: HUB_VIEW.originX + x * HUB_VIEW.scaleX + y * HUB_VIEW.skewX - game.cameraX,
+    y: HUB_VIEW.originY + x * HUB_VIEW.skewY + y * HUB_VIEW.scaleY - z - game.cameraY
+  };
+}
 
 const HUB_TUNING = {
   steeringAcceleration: 210,
@@ -118,6 +145,10 @@ const visualAssetPaths = {
   steveSideAir: './assets/steve/steve-side-airborne.svg',
   steveThreeQuarterGround: './assets/steve/steve-three-quarter-ground.svg',
   steveThreeQuarterAir: './assets/steve/steve-three-quarter-airborne.svg',
+  steveFront: './assets/steve/steve-front.svg',
+  steveBack: './assets/steve/steve-back.svg',
+  steveFrontDiagonal: './assets/steve/steve-front-diagonal.svg',
+  steveBackDiagonal: './assets/steve/steve-back-diagonal.svg',
   rampFace: './assets/park/ramp-face.svg',
   mural: './assets/park/mural-panel.svg',
   palms: './assets/park/palm-cluster.svg',
@@ -191,6 +222,7 @@ const world = {
 const competitionMaps = {
   halfpipe: {
     key: 'halfpipe',
+    type: 'halfpipe',
     name: 'Halfpipe Competition',
     length: 2400,
     gravityAssist: 0,
@@ -311,9 +343,11 @@ const player = {
   lastRampLaunch: -1,
   pendingTrick: null,
   recoveryTimer: 0
+  ,halfpipeAir: false
 };
 
 const HUB_SPAWN = { x: 1040, y: 860 };
+
 
 
 
@@ -590,6 +624,7 @@ function resetPlayerStateForCompetition() {
   player.spinValue = 0;
   player.pendingTrick = null;
   player.recoveryTimer = 0;
+  player.halfpipeAir = false;
   player.gatedPassed.clear();
 }
 
@@ -697,7 +732,76 @@ function updateHubSurfaceFeatures() {
   player.surfaceLift = lift;
 }
 
+function updateHalfpipeCompetition(dt) {
+  const competition = game.competition;
+  const session = competition.halfpipe;
+  player.y = 560;
+
+  if (consumeAny(['KeyR', 'PadReturn'])) {
+    resetPlayerStateForCompetition();
+    game.mode = 'hub';
+    game.competition = null;
+    game.competitionResult = null;
+    player.x = HUB_SPAWN.x;
+    player.y = HUB_SPAWN.y;
+    setMessage('Returned to city hub.', 1.5);
+    return;
+  }
+
+  if (player.halfpipeAir) {
+    session.x = Math.max(-HALFPIPE_HALF_WIDTH, Math.min(HALFPIPE_HALF_WIDTH, session.x + session.speed * dt));
+    player.z += player.vz * dt;
+    player.vz -= player.gravity * dt;
+    player.x = canvas.width * 0.5 + session.x;
+    const landingHeight = getSurfaceHeight(session.x);
+    if (player.vz < 0 && player.z <= landingHeight) {
+      player.z = landingHeight;
+      player.vz = 0;
+      player.onGround = true;
+      player.halfpipeAir = false;
+      resolveLanding();
+    }
+    return;
+  }
+
+  const direction = getMoveVector().x;
+  if (direction !== 0) session.speed += direction * 90 * dt;
+  if (consumeAny(['KeyK', 'PadPush'])) {
+    session.speed += Math.sign(session.speed || 1) * 110;
+    setMessage('Push across the halfpipe!', 0.8);
+  }
+  const next = stepHalfpipeSession(session, dt, { gravity: 80, drag: 0.01 });
+  Object.assign(session, next);
+  player.x = canvas.width * 0.5 + session.x;
+  player.z = getSurfaceHeight(session.x);
+  player.vy = session.speed;
+  player.speed = Math.abs(session.speed);
+
+  if (session.traversals > competition.awardedTraversals) {
+    const completed = session.traversals - competition.awardedTraversals;
+    competition.awardedTraversals = session.traversals;
+    addScore(completed * 90, `Halfpipe traverse x${session.traversals}`);
+  }
+
+  if (Math.abs(session.x) >= HALFPIPE_HALF_WIDTH - 2 && Math.abs(session.speed) > 250) {
+    player.halfpipeAir = true;
+    player.onGround = false;
+    player.vz = 300 * getCurrentRide().jumpMult;
+    beginAirborne('halfpipe lip', 40 * getCurrentRide().trickMult);
+    setMessage('Lip launch! Spin, then land back on the transition.', 1.1);
+  }
+
+  if (session.elapsed >= 45 || session.traversals >= 6) {
+    player.y = competition.map.length;
+  }
+}
+
 function applyMovementCompetition(dt) {
+  if (game.competition?.map.type === 'halfpipe') {
+    updateHalfpipeCompetition(dt);
+    if (game.competition) game.competition.halfpipeUpdated = true;
+    return;
+  }
   const ride = getCurrentRide();
   const move = getMoveVector();
   const turnStrength = 310 * ride.turnMult;
@@ -771,6 +875,7 @@ function performTricks(dt) {
 }
 
 function updateVertical(dt) {
+  if (game.mode === 'competition' && game.competition?.map.type === 'halfpipe') return;
   if (!player.onGround) {
     player.vz -= player.gravity * dt;
     player.z += player.vz * dt;
@@ -797,6 +902,13 @@ function updateCompetition(dt) {
   if (!game.competition) return;
   const map = game.competition.map;
   game.competition.runTime += dt;
+
+  if (map.type === 'halfpipe') {
+    if (!game.competition.halfpipeUpdated) updateHalfpipeCompetition(dt);
+    if (!game.competition) return;
+    game.competition.halfpipeUpdated = false;
+    if (player.y < map.length) return;
+  }
 
   for (let i = 0; i < map.gates.length; i += 1) {
     const gate = map.gates[i];
@@ -897,7 +1009,10 @@ function tryEnterCompetition() {
     map,
     runTime: 0,
     points: 0,
-    jumpedPads: new Set()
+    jumpedPads: new Set(),
+    halfpipe: zone.key === 'halfpipe' ? createHalfpipeSession({ x: 0, speed: 320 }) : null,
+    awardedTraversals: 0,
+    halfpipeUpdated: false
   };
 
   resetPlayerStateForCompetition();
@@ -1063,7 +1178,7 @@ function drawCityBackground() {
     ctx.stroke();
   }
 
-  for (const building of world.buildings) {
+  for (const building of [...world.buildings].sort((a, b) => (a.x + a.y) - (b.x + b.y))) {
     ctx.fillStyle = '#24485155';
     ctx.fillRect(building.x + 12, building.y + 14, building.w, building.h);
     ctx.fillStyle = building.color;
@@ -1078,7 +1193,7 @@ function drawCityBackground() {
     }
   }
 
-  for (const car of world.parkedCars) {
+  for (const car of [...world.parkedCars].sort((a, b) => (a.x + a.y) - (b.x + b.y))) {
     const roofInset = 10;
     ctx.fillStyle = '#202836';
     ctx.fillRect(car.x + 4, car.y + 6, car.w - 8, car.h - 8);
@@ -1100,6 +1215,58 @@ function drawCityBackground() {
 
   drawVisualAsset('mural', 1660, 330, 300, 190, { alpha: 0.94 });
   drawVisualAsset('mural', 2060, 1180, 300, 190, { alpha: 0.94, flipX: true });
+}
+
+function drawProjectedBox(rect, height, color, accent = '#f5c66d') {
+  const ground = [
+    projectHubPoint(rect.x, rect.y),
+    projectHubPoint(rect.x + rect.w, rect.y),
+    projectHubPoint(rect.x + rect.w, rect.y + rect.h),
+    projectHubPoint(rect.x, rect.y + rect.h)
+  ];
+  const top = ground.map((point, index) => projectHubPoint(
+    [rect.x, rect.x + rect.w, rect.x + rect.w, rect.x][index],
+    [rect.y, rect.y, rect.y + rect.h, rect.y + rect.h][index],
+    height
+  ));
+  const polygon = points => {
+    ctx.beginPath();
+    points.forEach((point, index) => index ? ctx.lineTo(point.x, point.y) : ctx.moveTo(point.x, point.y));
+    ctx.closePath();
+  };
+
+  ctx.fillStyle = 'rgba(26, 51, 57, 0.24)';
+  polygon(ground.map(point => ({ x: point.x + 12, y: point.y + 14 })));
+  ctx.fill();
+  ctx.fillStyle = color;
+  polygon([ground[0], ground[1], top[1], top[0]]); ctx.fill();
+  polygon([ground[1], ground[2], top[2], top[1]]); ctx.fillStyle = `${color}dd`; ctx.fill();
+  ctx.fillStyle = accent;
+  polygon(top); ctx.fill();
+  ctx.strokeStyle = '#0a3340aa';
+  ctx.lineWidth = 3;
+  polygon(top); ctx.stroke();
+}
+
+function drawDimensionalHubObjects() {
+  const buildings = [...world.buildings].sort((a, b) => (a.x + a.y) - (b.x + b.y));
+  for (const building of buildings) {
+    drawProjectedBox(building, Math.min(120, 55 + building.h * 0.18), building.color);
+    const door = projectHubPoint(building.x + building.w * 0.5, building.y + building.h, 28);
+    ctx.fillStyle = '#103d48';
+    ctx.fillRect(door.x - 9, door.y - 28, 18, 28);
+  }
+
+  for (const car of [...world.parkedCars].sort((a, b) => (a.x + a.y) - (b.x + b.y))) {
+    drawProjectedBox(car, 18, car.color, '#bce9df');
+    const near = projectHubPoint(car.x + car.w * 0.5, car.y + car.h, 2);
+    const far = projectHubPoint(car.x + car.w * 0.5, car.y, 2);
+    ctx.fillStyle = '#182831';
+    ctx.beginPath();
+    ctx.ellipse(near.x, near.y, 7, 4, 0, 0, Math.PI * 2);
+    ctx.ellipse(far.x, far.y, 7, 4, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
 }
 
 function drawHubWorld() {
@@ -1181,6 +1348,10 @@ function drawHubWorld() {
 
 function drawCompetitionCourse() {
   const map = game.competition.map;
+  if (map.type === 'halfpipe') {
+    drawHalfpipeCourse();
+    return;
+  }
   const courseLength = map.length;
   const courseAccent = {
     halfpipe: '#9b74ff',
@@ -1317,6 +1488,96 @@ function drawCompetitionCourse() {
   ctx.restore();
 }
 
+function drawHalfpipeCourse() {
+  const session = game.competition.halfpipe;
+  const centerX = canvas.width * 0.5;
+  const floorY = 590;
+  const scale = 0.92;
+  const surfacePoint = lateral => ({
+    x: centerX + lateral * scale,
+    y: floorY - getSurfaceHeight(lateral) * 0.92
+  });
+
+  const sky = ctx.createLinearGradient(0, 0, 0, canvas.height);
+  sky.addColorStop(0, '#65c9c2');
+  sky.addColorStop(0.62, '#f6c879');
+  sky.addColorStop(1, '#ee9860');
+  ctx.fillStyle = sky;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  ctx.fillStyle = '#fff2c655';
+  ctx.beginPath();
+  ctx.arc(120, 120, 72, 0, Math.PI * 2);
+  ctx.fill();
+  drawVisualAsset('palms', 42, 390, 170, 170, { alpha: 0.9 });
+  drawVisualAsset('mural', canvas.width - 210, 270, 170, 108, { alpha: 0.9 });
+
+  const surface = [];
+  for (let lateral = -HALFPIPE_HALF_WIDTH; lateral <= HALFPIPE_HALF_WIDTH; lateral += 8) {
+    surface.push(surfacePoint(lateral));
+  }
+  ctx.fillStyle = '#155f68';
+  ctx.beginPath();
+  ctx.moveTo(surface[0].x, surface[0].y);
+  for (const point of surface) ctx.lineTo(point.x, point.y);
+  ctx.lineTo(centerX + HALFPIPE_HALF_WIDTH * scale, floorY + 70);
+  ctx.lineTo(centerX - HALFPIPE_HALF_WIDTH * scale, floorY + 70);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.fillStyle = '#d9c49e';
+  ctx.beginPath();
+  ctx.moveTo(surface[0].x, surface[0].y);
+  for (const point of surface) ctx.lineTo(point.x, point.y);
+  for (let lateral = HALFPIPE_HALF_WIDTH; lateral >= -HALFPIPE_HALF_WIDTH; lateral -= 8) {
+    const point = surfacePoint(lateral);
+    ctx.lineTo(point.x, point.y + 18);
+  }
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.strokeStyle = '#063f42';
+  ctx.lineWidth = 8;
+  ctx.beginPath();
+  for (const [index, point] of surface.entries()) {
+    if (index === 0) ctx.moveTo(point.x, point.y);
+    else ctx.lineTo(point.x, point.y);
+  }
+  ctx.stroke();
+  ctx.strokeStyle = '#f97316';
+  ctx.lineWidth = 5;
+  for (const lateral of [-HALFPIPE_HALF_WIDTH, HALFPIPE_HALF_WIDTH]) {
+    const point = surfacePoint(lateral);
+    ctx.beginPath();
+    ctx.moveTo(point.x - 30, point.y - 2);
+    ctx.lineTo(point.x + 30, point.y - 2);
+    ctx.stroke();
+  }
+
+  ctx.fillStyle = '#0f766e';
+  ctx.fillRect(centerX - HALFPIPE_HALF_WIDTH * scale - 42, floorY - 196, 42, 210);
+  ctx.fillRect(centerX + HALFPIPE_HALF_WIDTH * scale, floorY - 196, 42, 210);
+  ctx.fillStyle = '#f8c46a';
+  ctx.fillRect(centerX - HALFPIPE_HALF_WIDTH * scale - 58, floorY - 204, 74, 10);
+  ctx.fillRect(centerX + HALFPIPE_HALF_WIDTH * scale - 16, floorY - 204, 74, 10);
+
+  ctx.fillStyle = '#063f42';
+  ctx.font = '22px sans-serif';
+  ctx.fillText('HALFPIPE SESSION', 28, 42);
+  ctx.font = '16px sans-serif';
+  ctx.fillText('Ride wall to wall. Push with K, steer with A/D, spin with L.', 28, 68);
+  ctx.fillStyle = '#ffffff44';
+  ctx.fillRect(28, 86, 220, 12);
+  ctx.fillStyle = '#f97316';
+  ctx.fillRect(28, 86, 220 * Math.min(1, session.traversals / 6), 12);
+  ctx.fillStyle = '#063f42';
+  ctx.fillText(`Traversals ${session.traversals}/6`, 28, 122);
+
+  player.x = centerX + session.x * scale;
+  player.y = floorY;
+  drawPlayer();
+}
+
 function drawProceduralSlothSprite() {
   const ride = getCurrentRide();
   const shadowScale = Math.max(0.5, 1 - player.z / 260);
@@ -1419,39 +1680,89 @@ function drawProceduralSlothSprite() {
 }
 
 function drawAuthoredSteveSprite() {
-  // Preserve the existing ride silhouettes until dedicated equipment art exists.
-  if (getCurrentRide().key !== 'skateboard') {
-    drawProceduralSlothSprite();
-    return;
-  }
   const airborne = !player.onGround;
   const spinning = airborne && player.spinValue > 0;
   const recovering = player.recoveryTimer > 0;
-  const useThreeQuarter = Math.abs(Math.sin(player.heading)) > 0.28;
+  const horizontal = Math.abs(Math.cos(player.heading)) >= Math.abs(Math.sin(player.heading));
+  const diagonal = Math.abs(Math.cos(player.heading)) > 0.34 && Math.abs(Math.sin(player.heading)) > 0.34;
+  const towardCamera = Math.cos(player.heading) + Math.sin(player.heading) > 0;
   const facingLeft = Math.cos(player.heading) < 0;
-  const assetName = spinning || airborne
-    ? (useThreeQuarter ? 'steveThreeQuarterAir' : 'steveSideAir')
-    : (useThreeQuarter ? 'steveThreeQuarterGround' : 'steveSideGround');
+  let assetName;
+  if (diagonal) {
+    assetName = towardCamera ? 'steveFrontDiagonal' : 'steveBackDiagonal';
+  } else if (horizontal) {
+    assetName = spinning || airborne ? 'steveSideAir' : 'steveSideGround';
+  } else {
+    assetName = towardCamera ? 'steveFront' : 'steveBack';
+  }
   const size = airborne ? 126 : 116;
-  const drawY = player.y - (player.z + player.surfaceLift);
+  const anchor = renderPlayerAnchor ?? { x: player.x, y: player.y };
+  const drawY = anchor.y;
   const bob = recovering ? 2 : (!airborne && player.speed > 100 ? Math.sin(performance.now() / 85) * 1.5 : 0);
 
   ctx.save();
   ctx.fillStyle = 'rgba(38, 49, 55, 0.28)';
   ctx.beginPath();
-  ctx.ellipse(player.x, player.y + 11, player.radius * 1.45 * Math.max(0.5, 1 - player.z / 260), player.radius * 0.65 * Math.max(0.5, 1 - player.z / 260), 0, 0, Math.PI * 2);
+  ctx.ellipse(anchor.x, anchor.y + 11, player.radius * 1.45 * Math.max(0.5, 1 - player.z / 260), player.radius * 0.65 * Math.max(0.5, 1 - player.z / 260), 0, 0, Math.PI * 2);
   ctx.fill();
   if (player.speed > 150 && !airborne) {
     ctx.strokeStyle = '#f8c46a99';
     ctx.lineWidth = 3;
     ctx.beginPath();
-    ctx.moveTo(player.x - Math.cos(player.heading) * 42, player.y + 8);
-    ctx.lineTo(player.x - Math.cos(player.heading) * 70, player.y + 8);
+    ctx.moveTo(anchor.x - Math.cos(player.heading) * 42, anchor.y + 8);
+    ctx.lineTo(anchor.x - Math.cos(player.heading) * 70, anchor.y + 8);
     ctx.stroke();
   }
-  const loaded = drawVisualAsset(assetName, player.x - size / 2, drawY - size * 0.82 + bob, size, size, { flipX: facingLeft });
+  const loaded = drawVisualAsset(assetName, anchor.x - size / 2, drawY - size * 0.82 + bob, size, size, { flipX: facingLeft });
+  if (loaded && getCurrentRide().key !== 'skateboard') {
+    drawRideEquipment(anchor.x, drawY + bob, getCurrentRide().key, size, facingLeft);
+  }
   ctx.restore();
-  if (!loaded) drawProceduralSlothSprite();
+}
+
+function drawRideEquipment(x, y, rideKey, size, facingLeft) {
+  const scale = size / 116;
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.scale(facingLeft ? -scale : scale, scale);
+  ctx.strokeStyle = '#263746';
+  ctx.lineWidth = 4;
+  ctx.fillStyle = '#f58b2a';
+  if (rideKey === 'bmx') {
+    ctx.beginPath();
+    ctx.arc(-23, 4, 12, 0, Math.PI * 2);
+    ctx.arc(23, 4, 12, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(-23, 4); ctx.lineTo(-3, -17); ctx.lineTo(23, 4); ctx.lineTo(-23, 4);
+    ctx.moveTo(-3, -17); ctx.lineTo(8, -30); ctx.lineTo(23, -28);
+    ctx.stroke();
+    ctx.fillStyle = '#63e0d3';
+    ctx.fillRect(-7, -20, 14, 5);
+  } else if (rideKey === 'scooter') {
+    ctx.fillStyle = '#ff8736';
+    ctx.fillRect(-30, 1, 60, 7);
+    ctx.fillStyle = '#263746';
+    ctx.beginPath();
+    ctx.arc(-22, 10, 5, 0, Math.PI * 2);
+    ctx.arc(22, 10, 5, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(18, 3); ctx.lineTo(18, -42); ctx.moveTo(8, -41); ctx.lineTo(28, -41);
+    ctx.stroke();
+  } else {
+    ctx.fillStyle = rideKey === 'quad' ? '#63e0d3' : '#9b74ff';
+    ctx.fillRect(-29, 0, 58, 8);
+    ctx.fillStyle = '#ff8736';
+    const wheelCount = rideKey === 'quad' ? 4 : 3;
+    for (let i = 0; i < wheelCount; i += 1) {
+      const wheelX = -21 + i * (42 / Math.max(1, wheelCount - 1));
+      ctx.beginPath();
+      ctx.arc(wheelX, 11, 4, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  ctx.restore();
 }
 
 function drawPlayer() {
@@ -1470,7 +1781,8 @@ function drawOverlay() {
     ctx.fillRect(18, canvas.height - 72, 430, 48);
     ctx.fillStyle = '#f1f5ff';
     ctx.font = '16px sans-serif';
-    ctx.fillText(`Practice line ${completed}/3: ${steps.find(([key]) => !game.objective[key])?.[1] ?? 'Complete'} | Ticket: ${Math.floor(game.score)}/${HUB_TUNING.practiceScoreGoal}`, 30, canvas.height - 42);
+    const nextTicket = (game.lastTicketAt + 1) * game.ticketThreshold;
+    ctx.fillText(`Practice line ${completed}/3: ${steps.find(([key]) => !game.objective[key])?.[1] ?? 'Complete'} | Next ticket: ${Math.floor(game.score)}/${nextTicket}`, 30, canvas.height - 42);
     const nearZone = getCurrentZone();
     if (nearZone) {
       ctx.fillStyle = 'rgba(5, 9, 15, 0.8)';
@@ -1488,10 +1800,13 @@ function drawOverlay() {
     ctx.font = '18px sans-serif';
     ctx.fillText(game.competition.name, canvas.width - 410, 40);
     ctx.font = '15px sans-serif';
-    const progress = Math.min(100, Math.round((player.y / game.competition.map.length) * 100));
+    const isHalfpipe = game.competition.map.type === 'halfpipe';
+    const progress = isHalfpipe
+      ? game.competition.halfpipe.traversals
+      : Math.min(100, Math.round((player.y / game.competition.map.length) * 100));
     ctx.fillText(`Score: ${Math.floor(game.competition.points)}`, canvas.width - 410, 62);
     ctx.fillText(`Run Time: ${game.competition.runTime.toFixed(1)}s`, canvas.width - 410, 82);
-    ctx.fillText(`Course: ${progress}%`, canvas.width - 410, 102);
+    ctx.fillText(isHalfpipe ? `Wall-to-wall: ${progress}/6` : `Course: ${progress}%`, canvas.width - 410, 102);
   }
 
   if (game.mode === 'results' && game.competitionResult) {
@@ -1521,19 +1836,35 @@ function drawOverlay() {
 }
 
 function renderHub() {
-  const lookAheadX = player.vx * 0.32;
-  const lookAheadY = player.vy * 0.32;
-  const targetX = Math.max(0, Math.min(world.width - canvas.width, player.x - canvas.width / 2 + lookAheadX));
-  const targetY = Math.max(0, Math.min(world.height - canvas.height, player.y - canvas.height / 2 + lookAheadY));
+  const project = (x, y, z = 0) => ({
+    x: HUB_VIEW.originX + x * HUB_VIEW.scaleX + y * HUB_VIEW.skewX,
+    y: HUB_VIEW.originY + x * HUB_VIEW.skewY + y * HUB_VIEW.scaleY - z
+  });
+  const lookAhead = project(player.x + player.vx * 0.32, player.y + player.vy * 0.32);
+  const targetX = Math.max(-620, Math.min(1180, lookAhead.x - canvas.width / 2));
+  const targetY = Math.max(-80, Math.min(820, lookAhead.y - canvas.height * 0.52));
   const damping = 1 - Math.exp(-8 * Math.min(0.033, 1 / 60));
   game.cameraX += (targetX - game.cameraX) * damping;
   game.cameraY += (targetY - game.cameraY) * damping;
 
   ctx.save();
-  ctx.translate(-game.cameraX, -game.cameraY);
+  ctx.setTransform(
+    HUB_VIEW.scaleX,
+    HUB_VIEW.skewY,
+    HUB_VIEW.skewX,
+    HUB_VIEW.scaleY,
+    HUB_VIEW.originX - game.cameraX,
+    HUB_VIEW.originY - game.cameraY
+  );
   drawHubWorld();
-  drawPlayer();
   ctx.restore();
+
+  drawDimensionalHubObjects();
+
+  const playerPoint = projectHubPoint(player.x, player.y, player.z + player.surfaceLift);
+  renderPlayerAnchor = { x: playerPoint.x - game.cameraX, y: playerPoint.y - game.cameraY };
+  drawPlayer();
+  renderPlayerAnchor = null;
 }
 
 function render() {
