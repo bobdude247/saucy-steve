@@ -25,17 +25,30 @@ Initial competitions (modeled after classic structure):
 - Open city hub with ramps/rails and trick opportunities
 - Ticket earning loop from street tricks
 - Enter 4 competition zones from hub
-- Keyboard controls only
+- Keyboard and standard gamepad controls
 
-### Controls (recommended baseline)
+### Controls (Milestone 1)
 
 Use **8-direction movement** for better feel and trick approach lines.
 
 - `WASD` or Arrow keys: movement/steering (8-direction with key combinations)
 - `K`: push/kick for speed
 - `J`: ollie/jump
-- `L`: spin modifier/action
+- `L`: queue 180-degree spin increments while airborne, or pivot on the ground at speed
+- `Space`: brake while grounded in the city hub; `S` / Down Arrow remain southward steering
 - `Z` / `X`: switch ride type (previous/next)
+- `E`: enter a competition when inside its hub zone (costs 1 ticket)
+- `R`: return to the city hub during a competition
+
+Gamepad support is implemented for standard browser gamepads:
+
+- Left stick or D-pad: movement/steering
+- R2: push/kick for speed
+- X (Cross): ollie/jump
+- Square: spin
+- Circle/B: enter a competition zone
+- Options: return to the hub during a competition
+- L1 / R1: switch ride type (previous/next)
 
 Why 8-direction over 4-direction:
 
@@ -43,13 +56,15 @@ Why 8-direction over 4-direction:
 - More natural approach to rails/ramps
 - Better long-term path to advanced trick systems
 
-### Trick Set (starter)
+### Trick Set (Milestone 1)
 
 - Ollie
-- Spin (with timing/airborne context)
-- Basic grind
-- Basic boardslide
-- (Optional stretch) kickflip
+- Spin (queue 180-degree increments during the 0.65-second airborne window; it scores only on a clean landing)
+- Rails are visual landmarks in Milestone 1; contact-based grinding is deferred
+- Basic boardslide (planned; not implemented)
+- (Optional stretch) kickflip (not implemented)
+
+Boardslides and kickflips remain planned work for a later milestone.
 
 ## Technical Direction (starter)
 
@@ -67,24 +82,40 @@ Recommended approach for rapid iteration:
 
 ## Controller Support
 
-Yes—design for it now, implement later.
-
-Plan:
-
-1. Build an input abstraction layer now (`move`, `push`, `ollie`, `spin` actions)
-2. Map keyboard first
-3. Add Gamepad API mapping in a later milestone without rewriting gameplay code
+Gamepad support is implemented through the browser Gamepad API and shares the
+same movement, push, ollie, spin, ride-switching, and event actions as the
+keyboard controls. Keyboard controls remain active if a controller is
+disconnected.
 
 ## Milestones
 
 ### Milestone 1: Playable Prototype
 
-- Character movement + momentum
-- Camera and collision in small city slice
-- Ollie and spin
-- Basic score + ticket gain
+- 8-direction character movement with momentum and world-boundary collision
+- Camera-following open city hub with ramps, rails, solid buildings, and solid parked cars
+- Ramps provide launch triggers; rails do not award proximity-based grind points
+- Ollie and timed airborne spin, with spin points awarded only after a clean landing
+- Ground braking with `S`, Down Arrow, or `Space`
+- Basic score and ticket gain from tricks (1 ticket per 300 total score)
+- Five selectable ride types with different movement, jump, and scoring tuning
+- Standard gamepad input alongside keyboard controls
 
-### Milestone 2: Hub + Competitions
+The hub displays a practice line objective: complete an ollie, queue a spin,
+and land it cleanly. The HUD also tracks progress toward the 300-point ticket
+threshold; the practice objective does not replace the normal score-based
+ticket rule.
+
+Landing on a solid obstacle or outside the spin alignment tolerance causes a
+bail with no trick score. A bail reduces momentum and briefly prevents another
+ollie while Steve recovers.
+
+The current prototype also includes the planned hub entrances and four
+course-style competitions. Each event costs 1 ticket; finishing produces a
+medal based on score, and first place awards 1 ticket. Competition-specific
+features include downhill speed bonuses, slalom gates, jump pads, and
+halfpipe jump opportunities.
+
+### Milestone 2: Hub + Competitions (partially implemented)
 
 - Four competition entrances
 - Entry cost in tickets
@@ -114,8 +145,9 @@ The repository now includes a playable browser prototype:
 
 Implemented in this prototype:
 
-- 8-direction keyboard movement in the city hub
+- 8-direction keyboard and gamepad movement in the city hub
 - Push (`K`), ollie (`J`), spin (`L`)
+- Competition entry (`E`) and return (`R`)
 - Ride switching (`Z`/`X`) between:
   - Skateboard
   - Razor Scooter
@@ -123,7 +155,7 @@ Implemented in this prototype:
   - Quad Rollerskates
   - BMX Bike
 - Score and ticket progression
-- Open urban hub art pass (streets, sidewalks, buildings, parked cars, rails, ramps)
+- Open urban hub art pass (streets, sidewalks, buildings, parked cars, rails, ramps, and a marked practice line)
 - Sloth-styled Saucy Steve sprite (head/body/limbs on board)
 - Four competition zones in the hub (Halfpipe, Downhill, Slalom, Jump)
 - Full-screen competition scenes that replace the city view
@@ -132,7 +164,7 @@ Implemented in this prototype:
   - **Slalom**: downhill run with gate hits for bonus score
   - **Jump**: downhill run with frequent jump features
   - **Halfpipe**: dedicated arena with repeated jump opportunities
-- Competition entry (`E`) and return (`R`)
+- Rails remain visual landmarks; contact-based grinding is deferred
 
 Ride-specific tuning currently included:
 

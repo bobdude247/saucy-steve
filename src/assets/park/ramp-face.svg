@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 150" role="img" aria-labelledby="title desc">
+  <title id="title">Sunny skatepark ramp face</title>
+  <desc id="desc">A dimensional teal quarter pipe with orange coping and coral side trim.</desc>
+  <path d="M18 128h204l-23-13H42z" fill="#0b5f5b" opacity=".28"/>
+  <path d="M29 124h183V45c-7-17-22-27-42-27H95c-36 0-66 29-66 65z" fill="#0f766e"/>
+  <path d="M29 124h183V45c-7-17-22-27-42-27H95c-36 0-66 29-66 65z" fill="none" stroke="#063f42" stroke-width="4" stroke-linejoin="round"/>
+  <path d="M32 122h177V47c-7-15-20-23-39-23H96c-35 0-64 27-64 61z" fill="#f8c46a" opacity=".88"/>
+  <path d="M32 122h177V47c-7-15-20-23-39-23H96c-35 0-64 27-64 61z" fill="#0f766e" opacity=".9"/>
+  <path d="M32 122c0-34 29-61 64-61h74c19 0 32 8 39 23v62H32z" fill="#168b83"/>
+  <path d="M32 61c0-34 29-61 64-61h74c19 0 32 8 39 23" fill="none" stroke="#fb7185" stroke-width="7" stroke-linecap="round"/>
+  <path d="M32 61c0-34 29-61 64-61h74c19 0 32 8 39 23" fill="none" stroke="#f97316" stroke-width="3" stroke-linecap="round"/>
+  <path d="M32 122h177" stroke="#f8c46a" stroke-width="5" stroke-linecap="round"/>
+  <path d="M49 108h124" stroke="#b9eee1" stroke-width="3" opacity=".65"/>
+  <path d="M43 124l-12 9M205 124l15 8" stroke="#063f42" stroke-width="4" stroke-linecap="round"/>
+</svg>

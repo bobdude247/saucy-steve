@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" width="240" height="240">
+  <defs>
+    <linearGradient id="fur" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#9a6548"/><stop offset="1" stop-color="#6f4436"/></linearGradient>
+    <linearGradient id="hoodie" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#159c9b"/><stop offset="1" stop-color="#086d7d"/></linearGradient>
+  </defs>
+  <!-- board shadow is omitted so the asset remains transparent -->
+  <g stroke="#4d2d2d" stroke-width="3" stroke-linejoin="round" stroke-linecap="round">
+    <path fill="#f58b2a" d="M36 193c13-7 44-7 66-2 33 7 67 5 102-4 5-1 9 2 6 6-36 20-113 19-169 7-8-2-10-5-5-7Z"/>
+    <circle fill="#ed7128" cx="66" cy="207" r="12"/><circle fill="#ed7128" cx="174" cy="207" r="12"/>
+    <circle fill="#ffd44d" cx="66" cy="207" r="5"/><circle fill="#ffd44d" cx="174" cy="207" r="5"/>
+    <path fill="url(#fur)" d="M72 57c-8-12-1-25 12-27 9-14 30-13 38-2 15-7 29 4 27 18 15 5 17 23 7 31 7 13-1 26-15 27-9 14-31 13-39 2-15 8-30-3-28-18-14-5-15-23-2-31Z"/>
+    <path fill="#f2d9b0" d="M103 54c25-8 48 5 47 27-1 24-27 38-50 28-16-7-22-25-15-40 4-8 9-12 18-15Z"/>
+    <path fill="none" d="M85 79c5 13 18 20 32 21"/>
+    <ellipse fill="#fff" cx="113" cy="72" rx="8" ry="10"/><ellipse fill="#fff" cx="137" cy="69" rx="8" ry="10"/>
+    <ellipse fill="#55352d" cx="115" cy="74" rx="4" ry="6"/><ellipse fill="#55352d" cx="139" cy="71" rx="4" ry="6"/>
+    <path fill="none" d="M120 89c8 5 15 4 21-1"/>
+    <path fill="#159c9b" d="M79 109c19-10 48-7 67 6l12 50-74 7-14-45c-2-7 2-14 9-18Z"/>
+    <path fill="#f58b2a" d="M81 111c18 9 36 11 57 7l4 8c-24 7-44 3-64-7Z" stroke-width="2"/>
+    <path fill="#159c9b" d="M78 117c-11 11-16 26-18 45l19 3 15-38Z"/>
+    <path fill="#9a6548" d="M58 158c6 0 14 3 21 7l-3 12-24-4c-6-1-7-8-2-12Z"/>
+    <path fill="#9a6548" d="M96 163l25 1-1 22-26 1Z"/><path fill="#9a6548" d="M137 161l22-4 5 22-23 6Z"/>
+    <path fill="#139493" d="M91 180h31l8 14c-13 5-29 4-43 0Z"/><path fill="#139493" d="M145 179l27-7 11 12c-8 10-25 14-37 9Z"/>
+    <path fill="#e9f5e8" d="M93 187h28l3 7c-12 3-24 2-35 0Z" stroke-width="2"/><path fill="#e9f5e8" d="M151 183l20-5 6 6c-8 5-16 7-25 6Z" stroke-width="2"/>
+    <path fill="#159c9b" d="M83 28c9-10 28-12 44-7l17 13-8 12-47-3Z"/>
+    <path fill="#f58b2a" d="M81 35l51 5-2 9-48-4Z" stroke-width="2"/>
+    <path fill="#46b9c0" d="M134 25l16-10 6 6-18 17Z"/>
+    <path fill="#478fbd" d="M99 56l17 3-6 10-18-3Z"/><path fill="#478fbd" d="M123 58l18-2 2 10-18 2Z"/>
+  </g>
+</svg>

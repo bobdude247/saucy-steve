@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 120" role="img" aria-labelledby="title desc">
+  <title id="title">Skatepark rail and platform accent</title>
+  <desc id="desc">A compact teal platform with orange edge and coral grind rail.</desc>
+  <path d="M19 88h143l39 16H58z" fill="#0b5f5b" opacity=".3"/>
+  <path d="M24 81h145l27 12H51z" fill="#f8c46a" stroke="#063f42" stroke-width="4" stroke-linejoin="round"/>
+  <path d="M51 93h145v10H51z" fill="#0f766e" stroke="#063f42" stroke-width="4"/>
+  <path d="M61 102v12M183 102v12" stroke="#063f42" stroke-width="5" stroke-linecap="round"/>
+  <path d="M48 64h112c8 0 14 6 14 14v3H34v-3c0-8 6-14 14-14z" fill="#168b83" stroke="#063f42" stroke-width="4"/>
+  <path d="M39 61h126" stroke="#fb7185" stroke-width="7" stroke-linecap="round"/>
+  <path d="M53 61V43c0-5 4-9 9-9h67c5 0 9 4 9 9v18" fill="none" stroke="#f97316" stroke-width="6" stroke-linecap="round"/>
+  <path d="M62 34h67" stroke="#063f42" stroke-width="4" stroke-linecap="round"/>
+</svg>

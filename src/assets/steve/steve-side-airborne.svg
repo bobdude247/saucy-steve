@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" width="240" height="240">
+  <defs><linearGradient id="fur" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#a36b4b"/><stop offset="1" stop-color="#704538"/></linearGradient><linearGradient id="hoodie" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#19aaa4"/><stop offset="1" stop-color="#08727d"/></linearGradient></defs>
+  <g transform="rotate(-8 120 120)" stroke="#4d2d2d" stroke-width="3" stroke-linejoin="round" stroke-linecap="round">
+    <path fill="#f58b2a" d="M43 194c28-8 72-4 105 1 21 3 39 1 54-3 6-2 9 3 4 7-39 20-117 12-162 3-8-2-8-6-1-8Z"/><circle fill="#ed7128" cx="73" cy="207" r="11"/><circle fill="#ed7128" cx="174" cy="207" r="11"/><circle fill="#ffd44d" cx="73" cy="207" r="4"/><circle fill="#ffd44d" cx="174" cy="207" r="4"/>
+    <path fill="url(#fur)" d="M72 57c-8-12-1-25 12-27 9-14 30-13 38-2 15-7 29 4 27 18 15 5 17 23 7 31 7 13-1 26-15 27-9 14-31 13-39 2-15 8-30-3-28-18-14-5-15-23-2-31Z"/><path fill="#f2d9b0" d="M103 54c25-8 48 5 47 27-1 24-27 38-50 28-16-7-22-25-15-40 4-8 9-12 18-15Z"/>
+    <ellipse fill="#fff" cx="113" cy="72" rx="8" ry="10"/><ellipse fill="#fff" cx="137" cy="69" rx="8" ry="10"/><ellipse fill="#55352d" cx="115" cy="74" rx="4" ry="6"/><ellipse fill="#55352d" cx="139" cy="71" rx="4" ry="6"/><path fill="none" d="M120 89c8 5 15 4 21-1"/>
+    <path fill="#159c9b" d="M80 110c22-11 52-6 67 8l10 45-70 10-16-44c-3-8 1-15 9-19Z"/><path fill="#f58b2a" d="M82 111c18 10 37 11 56 7l5 8c-25 7-44 3-64-7Z" stroke-width="2"/>
+    <path fill="#159c9b" d="M78 119c-12 2-25 8-33 19l11 10 30-18Z"/><path fill="#9a6548" d="M45 136l12 10-10 14c-8-1-13-7-12-14Z"/><path fill="#159c9b" d="M145 155l30-13 8 13-29 19Z"/><path fill="#9a6548" d="M175 142l12-5 10 14-14 10Z"/>
+    <path fill="#9a6548" d="M91 164l25 1-4 23-27-2Z"/><path fill="#9a6548" d="M133 161l22-4 5 22-23 6Z"/><path fill="#139493" d="M85 183l30 2 7 12c-13 5-29 3-43-2Z"/><path fill="#139493" d="M141 180l27-7 10 11c-8 10-25 14-37 9Z"/>
+    <path fill="#e9f5e8" d="M88 189l27 2 3 6c-12 3-23 2-34-1Z" stroke-width="2"/><path fill="#e9f5e8" d="M147 184l20-5 6 6c-8 5-16 7-25 6Z" stroke-width="2"/>
+    <path fill="#159c9b" d="M83 28c9-10 28-12 44-7l17 13-8 12-47-3Z"/><path fill="#f58b2a" d="M81 35l51 5-2 9-48-4Z" stroke-width="2"/><path fill="#46b9c0" d="M134 25l16-10 6 6-18 17Z"/><path fill="#478fbd" d="M99 56l17 3-6 10-18-3Z"/><path fill="#478fbd" d="M123 58l18-2 2 10-18 2Z"/>
+  </g>
+</svg>

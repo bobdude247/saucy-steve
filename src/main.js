@@ -12,6 +12,18 @@ const ui = {
 
 const HUB_MESSAGE = 'Skate the city and rack up points to earn tickets.';
 
+const HUB_TUNING = {
+  steeringAcceleration: 210,
+  velocityTurnRate: 3.8,
+  sidewaysDamping: 7.5,
+  braking: 620,
+  collisionStep: 8,
+  landingSpinTolerance: 38,
+  maxSafeSpin: 360,
+  landingRecovery: 0.35,
+  practiceScoreGoal: 300
+};
+
 const game = {
   mode: 'hub',
   score: 0,
@@ -26,7 +38,8 @@ const game = {
   competitionStartY: 0,
   rideIndex: 0,
   competitionResult: null,
-  resultsTimer: 0
+  resultsTimer: 0,
+  objective: { ollie: false, spin: false, landing: false }
 };
 
 const rides = [
@@ -99,6 +112,24 @@ const gamepad = {
   deadzone: 0.2
 };
 
+const visualAssets = {};
+const visualAssetPaths = {
+  steveSideGround: './assets/steve/steve-side-ground.svg',
+  steveSideAir: './assets/steve/steve-side-airborne.svg',
+  steveThreeQuarterGround: './assets/steve/steve-three-quarter-ground.svg',
+  steveThreeQuarterAir: './assets/steve/steve-three-quarter-airborne.svg',
+  rampFace: './assets/park/ramp-face.svg',
+  mural: './assets/park/mural-panel.svg',
+  palms: './assets/park/palm-cluster.svg',
+  railPlatform: './assets/park/rail-platform.svg'
+};
+
+for (const [name, path] of Object.entries(visualAssetPaths)) {
+  const image = new Image();
+  image.src = new URL(path, import.meta.url).href;
+  visualAssets[name] = image;
+}
+
 const padBindings = {
   jump: { button: 0, code: 'PadJump' },
   spin: { button: 2, code: 'PadSpin' },
@@ -153,7 +184,8 @@ const world = {
     { key: 'downhill', name: 'Downhill Competition', x: 2160, y: 330, w: 360, h: 230, color: '#64dc8f', ticketCost: 1 },
     { key: 'slalom', name: 'Slalom Competition', x: 260, y: 1150, w: 360, h: 270, color: '#ffad5f', ticketCost: 1 },
     { key: 'jump', name: 'Jump Competition', x: 2140, y: 1140, w: 350, h: 260, color: '#63b6ff', ticketCost: 1 }
-  ]
+  ],
+  practiceLine: { x: 760, y: 700, w: 560, h: 300 }
 };
 
 const competitionMaps = {
@@ -276,15 +308,23 @@ const player = {
   grinding: false,
   gatedPassed: new Set(),
   surfaceLift: 0,
-  lastRampLaunch: -1
+  lastRampLaunch: -1,
+  pendingTrick: null,
+  recoveryTimer: 0
 };
 
 const HUB_SPAWN = { x: 1040, y: 860 };
+
+
+
 
 let lastTime = performance.now();
 
 window.addEventListener('keydown', (event) => {
   const code = event.code;
+  if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(code)) {
+    event.preventDefault();
+  }
   if (!input.pressed.has(code)) {
     input.justPressed.add(code);
   }
@@ -293,6 +333,19 @@ window.addEventListener('keydown', (event) => {
 
 window.addEventListener('keyup', (event) => {
   input.pressed.delete(event.code);
+});
+
+function clearHeldInput() {
+  input.pressed.clear();
+  input.justPressed.clear();
+  gamepad.axes.lx = 0;
+  gamepad.axes.ly = 0;
+  gamepad.buttonPressed.clear();
+}
+
+window.addEventListener('blur', clearHeldInput);
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) clearHeldInput();
 });
 
 function applyDeadzone(value, deadzone = gamepad.deadzone) {
@@ -428,6 +481,105 @@ function angleLerp(current, target, speed, dt) {
   return current + Math.sign(diff) * step;
 }
 
+function getHubSolids() {
+  return [
+    ...world.buildings,
+    ...world.parkedCars
+  ];
+}
+
+function circleOverlapsRect(x, y, radius, rect) {
+  const nearestX = Math.max(rect.x, Math.min(x, rect.x + rect.w));
+  const nearestY = Math.max(rect.y, Math.min(y, rect.y + rect.h));
+  return Math.hypot(x - nearestX, y - nearestY) < radius;
+}
+
+function resolveHubCollision(axis, attempted) {
+  let resolved = attempted;
+  for (const obstacle of getHubSolids()) {
+    if (!circleOverlapsRect(
+      axis === 'x' ? resolved : player.x,
+      axis === 'y' ? resolved : player.y,
+      player.radius,
+      obstacle
+    )) continue;
+
+    if (axis === 'x') {
+      resolved = player.vx > 0 ? obstacle.x - player.radius : obstacle.x + obstacle.w + player.radius;
+      player.vx = 0;
+    } else {
+      resolved = player.vy > 0 ? obstacle.y - player.radius : obstacle.y + obstacle.h + player.radius;
+      player.vy = 0;
+    }
+  }
+  return resolved;
+}
+
+function movePlayerHub(dt) {
+  if (!player.onGround) {
+    player.x += player.vx * dt;
+    player.y += player.vy * dt;
+    return;
+  }
+  const distance = Math.hypot(player.vx, player.vy) * dt;
+  const steps = Math.max(1, Math.ceil(distance / HUB_TUNING.collisionStep));
+  const stepDt = dt / steps;
+  for (let step = 0; step < steps; step += 1) {
+    player.x = resolveHubCollision('x', player.x + player.vx * stepDt);
+    player.y = resolveHubCollision('y', player.y + player.vy * stepDt);
+  }
+}
+
+function markObjective(action) {
+  if (game.mode === 'hub') game.objective[action] = true;
+}
+
+function beginAirborne(source, basePoints) {
+  player.onGround = false;
+  player.spinWindow = 0.65;
+  player.spinValue = 0;
+  player.pendingTrick = {
+    source,
+    basePoints,
+    spin: 0
+  };
+}
+
+function resolveLanding() {
+  const trick = player.pendingTrick;
+  player.pendingTrick = null;
+  player.spinWindow = 0;
+  if (!trick) return;
+
+  const onSolid = getHubSolids().some((obstacle) => (
+    game.mode === 'hub' && circleOverlapsRect(player.x, player.y, player.radius, obstacle)
+  ));
+  const speed = Math.hypot(player.vx, player.vy);
+  const spinRemainder = Math.abs(((trick.spin + 90) % 180) - 90);
+  const aligned = trick.spin <= HUB_TUNING.maxSafeSpin && (
+    speed < 80 || spinRemainder <= HUB_TUNING.landingSpinTolerance
+  );
+  if (onSolid || !aligned) {
+    player.vx *= 0.35;
+    player.vy *= 0.35;
+    player.recoveryTimer = HUB_TUNING.landingRecovery;
+    game.currentCombo = 'Bail - no score';
+    setMessage('Bail! Recover and try the line again.', 1.1);
+    return;
+  }
+
+  const spinPoints = trick.spin / 180 * (game.mode === 'competition' ? 52 : 45) * getCurrentRide().trickMult;
+  const points = trick.basePoints + Math.max(0, spinPoints);
+  const label = trick.spin > 0 ? `Ollie + spin ${trick.spin}°` : 'Ollie';
+  addScore(points, `${label} +${Math.round(points)}`);
+  if (trick.source === 'ollie') markObjective('ollie');
+  if (trick.spin > 0) {
+    markObjective('spin');
+    markObjective('landing');
+  }
+  setMessage(`${label} landed! +${Math.round(points)}`, 1.2);
+}
+
 function resetPlayerStateForCompetition() {
   player.vx = 0;
   player.vy = 0;
@@ -436,6 +588,8 @@ function resetPlayerStateForCompetition() {
   player.onGround = true;
   player.spinWindow = 0;
   player.spinValue = 0;
+  player.pendingTrick = null;
+  player.recoveryTimer = 0;
   player.gatedPassed.clear();
 }
 
@@ -453,6 +607,25 @@ function applyMovementHub(dt) {
   if (move.length > 0) {
     const targetHeading = Math.atan2(move.y, move.x);
     player.heading = angleLerp(player.heading, targetHeading, player.turnRate * ride.turnMult, dt);
+
+    if (player.speed > 1) {
+      const travelHeading = Math.atan2(player.vy, player.vx);
+      const redirectedHeading = angleLerp(travelHeading, targetHeading, HUB_TUNING.velocityTurnRate * ride.turnMult, dt);
+      const redirectedSpeed = Math.hypot(player.vx, player.vy) + HUB_TUNING.steeringAcceleration * dt;
+      player.vx = Math.cos(redirectedHeading) * redirectedSpeed;
+      player.vy = Math.sin(redirectedHeading) * redirectedSpeed;
+      const forward = player.vx * Math.cos(player.heading) + player.vy * Math.sin(player.heading);
+      const sideways = player.vx * -Math.sin(player.heading) + player.vy * Math.cos(player.heading);
+      const settledSideways = sideways * Math.exp(-HUB_TUNING.sidewaysDamping * dt);
+      player.vx = forward * Math.cos(player.heading) - settledSideways * Math.sin(player.heading);
+      player.vy = forward * Math.sin(player.heading) + settledSideways * Math.cos(player.heading);
+    }
+  }
+
+  if (isDownAny(['Space']) && player.onGround) {
+    const brake = Math.max(0, 1 - HUB_TUNING.braking * dt / Math.max(player.speed, 1));
+    player.vx *= brake;
+    player.vy *= brake;
   }
 
   if (consumeAny(['KeyK', 'PadPush']) && player.pushCooldown <= 0 && player.onGround) {
@@ -475,8 +648,7 @@ function applyMovementHub(dt) {
   player.vx *= drag;
   player.vy *= drag;
 
-  player.x += player.vx * dt;
-  player.y += player.vy * dt;
+  movePlayerHub(dt);
 
   player.x = Math.max(player.radius, Math.min(world.width - player.radius, player.x));
   player.y = Math.max(player.radius, Math.min(world.height - player.radius, player.y));
@@ -512,7 +684,7 @@ function updateHubSurfaceFeatures() {
       player.vz = 250 * ride.jumpMult;
       player.onGround = false;
       player.lastRampLaunch = i;
-      addScore(24 * ride.trickMult, 'Ramp launch +24');
+      beginAirborne('ramp', 24 * ride.trickMult);
       setMessage('Launch! Hit L in the air for extra points.', 1.1);
     }
   }
@@ -521,17 +693,7 @@ function updateHubSurfaceFeatures() {
     player.lastRampLaunch = -1;
   }
 
-  for (const car of world.parkedCars) {
-    const platformInset = 10;
-    const onTop = player.x >= car.x + platformInset &&
-      player.x <= car.x + car.w - platformInset &&
-      player.y >= car.y + platformInset &&
-      player.y <= car.y + car.h - platformInset;
-    if (onTop) {
-      lift = Math.max(lift, car.platformHeight);
-    }
-  }
-
+  // Cars are solid obstacles in this slice, not elevated rideable surfaces.
   player.surfaceLift = lift;
 }
 
@@ -583,25 +745,20 @@ function applyMovementCompetition(dt) {
 
 function performTricks(dt) {
   const ride = getCurrentRide();
-  if (consumeAny(['KeyJ', 'PadJump']) && player.onGround && player.trickCooldown <= 0) {
+  if (consumeAny(['KeyJ', 'PadJump']) && player.onGround && player.trickCooldown <= 0 && player.recoveryTimer <= 0) {
     const basePop = game.mode === 'competition' ? 340 : 380;
     player.vz = basePop * ride.jumpMult;
-    player.onGround = false;
+    beginAirborne('ollie', 30 * ride.trickMult);
     player.trickCooldown = 0.25;
-    player.spinWindow = 0.65;
-    player.spinValue = 0;
-    const olliePoints = 30 * ride.trickMult;
-    addScore(olliePoints, `Ollie +${Math.round(olliePoints)}`);
     setMessage('Ollie! Press L in the air to spin.', 1.1);
   }
 
   if (consumeAny(['KeyL', 'PadSpin'])) {
-    if (!player.onGround && player.spinWindow > 0) {
+    if (!player.onGround && player.spinWindow > 0 && player.pendingTrick) {
       player.spinValue += 180;
-      const basePoints = game.mode === 'competition' ? 52 : 45;
-      const points = basePoints * ride.trickMult;
-      addScore(points, `Air Spin ${player.spinValue}° +${points}`);
-      setMessage(`Spin landed: ${player.spinValue}°`, 1.0);
+      player.pendingTrick.spin = player.spinValue;
+      player.heading += Math.PI;
+      setMessage(`Spin queued: ${player.spinValue}° - land it!`, 1.0);
     } else if (player.onGround && player.speed > 190) {
       const pivotPoints = 20 * ride.trickMult;
       addScore(pivotPoints, `Quick pivot +${Math.round(pivotPoints)}`);
@@ -609,22 +766,8 @@ function performTricks(dt) {
     }
   }
 
-  if (game.mode === 'hub') {
-    player.grinding = false;
-    for (const rail of world.railSegments) {
-      const cx = (rail.x1 + rail.x2) / 2;
-      const cy = (rail.y1 + rail.y2) / 2;
-      const nearRail = Math.hypot(player.x - cx, player.y - cy) < 130;
-      if (nearRail && player.onGround && player.speed > 210) {
-        player.grinding = true;
-        const grindScore = 8 * dt * ride.trickMult;
-        addScore(grindScore, getComboLabel('Grind', grindScore));
-        break;
-      }
-    }
-  } else {
-    player.grinding = false;
-  }
+  // Rails remain visual landmarks until real contact-based grinding is implemented.
+  player.grinding = false;
 }
 
 function updateVertical(dt) {
@@ -636,7 +779,7 @@ function updateVertical(dt) {
       player.z = 0;
       player.vz = 0;
       player.onGround = true;
-      player.spinWindow = 0;
+      resolveLanding();
     }
   }
 }
@@ -674,13 +817,14 @@ function updateCompetition(dt) {
     if (Math.abs(player.y - jumpY) <= 18 && player.onGround) {
       const ride = getCurrentRide();
       player.vz = Math.max(player.vz, 320 * ride.jumpMult);
-      player.onGround = false;
+      beginAirborne('course jump', 35 * ride.trickMult);
       game.competition.jumpedPads.add(i);
-      addScore(35 * ride.trickMult, 'Course jump +35');
+      setMessage('Course jump! Land it cleanly.', 0.9);
     }
   }
 
   if (consumeAny(['KeyR', 'PadReturn'])) {
+    resetPlayerStateForCompetition();
     game.mode = 'hub';
     game.competition = null;
     game.competitionResult = null;
@@ -732,6 +876,7 @@ function updateCompetition(dt) {
         : `${medal} medal - ${placement === 4 ? 'keep pushing for podium.' : `placed #${placement}`}`,
       4.2
     );
+    resetPlayerStateForCompetition();
   }
 }
 
@@ -776,6 +921,7 @@ function update(dt) {
 
   player.pushCooldown = Math.max(0, player.pushCooldown - dt);
   player.trickCooldown = Math.max(0, player.trickCooldown - dt);
+  player.recoveryTimer = Math.max(0, player.recoveryTimer - dt);
   game.messageTimer = Math.max(0, game.messageTimer - dt);
 
   if (game.mode === 'hub') {
@@ -857,23 +1003,73 @@ function drawRoad(road) {
   }
 }
 
+function drawVisualAsset(name, x, y, width, height, options = {}) {
+  const image = visualAssets[name];
+  if (!image?.complete || image.naturalWidth === 0) return false;
+  ctx.save();
+  if (options.alpha !== undefined) ctx.globalAlpha = options.alpha;
+  if (options.flipX) {
+    ctx.translate(x + width, y);
+    ctx.scale(-1, 1);
+    ctx.drawImage(image, 0, 0, width, height);
+  } else {
+    ctx.drawImage(image, x, y, width, height);
+  }
+  ctx.restore();
+  return true;
+}
+
+const parkDecor = [
+  { asset: 'palms', x: 26, y: 420, width: 150, height: 150 },
+  { asset: 'palms', x: 2380, y: 480, width: 170, height: 170 },
+  { asset: 'palms', x: 1960, y: 920, width: 145, height: 145 },
+  { asset: 'palms', x: 560, y: 1080, width: 150, height: 150 }
+];
+
 function drawCityBackground() {
-  ctx.fillStyle = '#5d82ad';
+  const sky = ctx.createLinearGradient(0, 0, 0, world.height);
+  sky.addColorStop(0, '#79cbd0');
+  sky.addColorStop(0.45, '#58aebc');
+  sky.addColorStop(1, '#f3b56a');
+  ctx.fillStyle = sky;
   ctx.fillRect(0, 0, world.width, world.height);
+
+  ctx.fillStyle = '#fff4c766';
+  ctx.beginPath();
+  ctx.arc(250, 190, 100, 0, Math.PI * 2);
+  ctx.fill();
+
+  for (const decor of parkDecor) {
+    drawVisualAsset(decor.asset, decor.x, decor.y, decor.width, decor.height, { alpha: 0.95 });
+  }
 
   for (const road of world.roads) {
     drawRoad(road);
   }
 
-  ctx.fillStyle = '#8aa5b1';
+  ctx.fillStyle = '#d6c6a8';
   ctx.fillRect(80, 580, 2640, 80);
   ctx.fillRect(80, 1070, 2640, 80);
   ctx.fillRect(1060, 70, 80, 1660);
   ctx.fillRect(1430, 70, 80, 1660);
+  ctx.strokeStyle = '#fff1c955';
+  ctx.lineWidth = 2;
+  for (let x = 80; x < 2740; x += 64) {
+    ctx.beginPath();
+    ctx.moveTo(x, 580);
+    ctx.lineTo(x, 660);
+    ctx.moveTo(x, 1070);
+    ctx.lineTo(x, 1150);
+    ctx.stroke();
+  }
 
   for (const building of world.buildings) {
+    ctx.fillStyle = '#24485155';
+    ctx.fillRect(building.x + 12, building.y + 14, building.w, building.h);
     ctx.fillStyle = building.color;
     ctx.fillRect(building.x, building.y, building.w, building.h);
+    ctx.fillStyle = '#f5c66d';
+    ctx.fillRect(building.x, building.y, building.w, 9);
     ctx.fillStyle = '#d4e2ff22';
     for (let y = building.y + 18; y < building.y + building.h - 12; y += 28) {
       for (let x = building.x + 12; x < building.x + building.w - 10; x += 22) {
@@ -901,10 +1097,25 @@ function drawCityBackground() {
       ctx.fillRect(car.x + car.w - 12, car.y + car.h - 30, 8, 18);
     }
   }
+
+  drawVisualAsset('mural', 1660, 330, 300, 190, { alpha: 0.94 });
+  drawVisualAsset('mural', 2060, 1180, 300, 190, { alpha: 0.94, flipX: true });
 }
 
 function drawHubWorld() {
   drawCityBackground();
+
+  const practice = world.practiceLine;
+  ctx.fillStyle = '#9bff7a18';
+  ctx.fillRect(practice.x, practice.y, practice.w, practice.h);
+  ctx.strokeStyle = '#9bff7a';
+  ctx.lineWidth = 4;
+  ctx.setLineDash([14, 10]);
+  ctx.strokeRect(practice.x, practice.y, practice.w, practice.h);
+  ctx.setLineDash([]);
+  ctx.fillStyle = '#f5f7ff';
+  ctx.font = '18px sans-serif';
+  ctx.fillText('PRACTICE LINE: OLLIE + SPIN + LAND', practice.x + 16, practice.y + 28);
 
   for (const zone of world.zones) {
     ctx.fillStyle = `${zone.color}3a`;
@@ -922,11 +1133,15 @@ function drawHubWorld() {
   ctx.strokeStyle = '#8de3ff';
   ctx.lineWidth = 8;
   for (const rail of world.railSegments) {
+    ctx.fillStyle = '#24485155';
+    ctx.fillRect(Math.min(rail.x1, rail.x2), Math.min(rail.y1, rail.y2) + 12, Math.abs(rail.x2 - rail.x1), 24);
     ctx.beginPath();
     ctx.moveTo(rail.x1, rail.y1);
     ctx.lineTo(rail.x2, rail.y2);
     ctx.stroke();
   }
+  drawVisualAsset('railPlatform', 650, 520, 300, 164, { alpha: 0.95 });
+  drawVisualAsset('railPlatform', 1500, 1070, 320, 175, { alpha: 0.95, flipX: true });
 
   for (const ramp of world.ramps) {
     const risingRight = ramp.dir === 'right';
@@ -960,13 +1175,23 @@ function drawHubWorld() {
     ctx.strokeStyle = '#8fb8ff';
     ctx.lineWidth = 3;
     ctx.strokeRect(ramp.x + 2, ramp.y + 2, ramp.w - 4, ramp.h - 4);
+    drawVisualAsset('rampFace', ramp.x - 8, ramp.y - 12, ramp.w + 16, ramp.h + 32, { alpha: 0.82 });
   }
 }
 
 function drawCompetitionCourse() {
   const map = game.competition.map;
   const courseLength = map.length;
-  ctx.fillStyle = '#192231';
+  const courseAccent = {
+    halfpipe: '#9b74ff',
+    downhill: '#64dc8f',
+    slalom: '#ffad5f',
+    jump: '#63b6ff'
+  }[map.key] ?? '#63e0d3';
+  const courseSky = ctx.createLinearGradient(0, 0, 0, canvas.height);
+  courseSky.addColorStop(0, courseAccent);
+  courseSky.addColorStop(1, '#f0b267');
+  ctx.fillStyle = courseSky;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
   const cameraCourseY = Math.max(0, Math.min(courseLength - canvas.height, player.y - canvas.height * 0.34));
@@ -975,13 +1200,25 @@ function drawCompetitionCourse() {
   ctx.save();
   ctx.translate(0, -cameraCourseY);
 
-  ctx.fillStyle = '#31455d';
+  ctx.fillStyle = '#d8c39f';
   ctx.fillRect(0, 0, canvas.width, courseLength);
+  ctx.globalAlpha = 0.16;
+  ctx.fillStyle = courseAccent;
+  for (let y = 0; y < courseLength; y += 180) {
+    ctx.fillRect(0, y, canvas.width, 42);
+  }
+  ctx.globalAlpha = 1;
 
   ctx.fillStyle = '#2f3137';
   for (let y = 0; y < courseLength; y += 14) {
     const centerX = getCompetitionCenterXForY(y);
     ctx.fillRect(centerX - map.laneWidth / 2, y, map.laneWidth, 11);
+  }
+
+  for (let y = 160; y < courseLength; y += 540) {
+    const centerX = getCompetitionCenterXForY(y);
+    drawVisualAsset('mural', centerX - map.laneWidth / 2 - 78, y + 40, 150, 96, { alpha: 0.82 });
+    drawVisualAsset('palms', centerX + map.laneWidth / 2 - 10, y + 20, 120, 120, { alpha: 0.8 });
   }
 
   ctx.strokeStyle = '#d6ecff66';
@@ -1072,15 +1309,15 @@ function drawCompetitionCourse() {
     ctx.fillRect(x, finishY, 16, 12);
     ctx.fillRect(x + 16, finishY + 12, 16, 12);
   }
-  ctx.fillStyle = '#f7f8ff';
+  ctx.fillStyle = courseAccent;
   ctx.font = '18px sans-serif';
-  ctx.fillText('FINISH', 24, finishY - 8);
+  ctx.fillText(`${map.name.toUpperCase()} / FINISH`, 24, finishY - 8);
 
   drawPlayer();
   ctx.restore();
 }
 
-function drawSlothSprite() {
+function drawProceduralSlothSprite() {
   const ride = getCurrentRide();
   const shadowScale = Math.max(0.5, 1 - player.z / 260);
   ctx.fillStyle = 'rgba(0,0,0,0.25)';
@@ -1181,12 +1418,59 @@ function drawSlothSprite() {
   ctx.restore();
 }
 
+function drawAuthoredSteveSprite() {
+  // Preserve the existing ride silhouettes until dedicated equipment art exists.
+  if (getCurrentRide().key !== 'skateboard') {
+    drawProceduralSlothSprite();
+    return;
+  }
+  const airborne = !player.onGround;
+  const spinning = airborne && player.spinValue > 0;
+  const recovering = player.recoveryTimer > 0;
+  const useThreeQuarter = Math.abs(Math.sin(player.heading)) > 0.28;
+  const facingLeft = Math.cos(player.heading) < 0;
+  const assetName = spinning || airborne
+    ? (useThreeQuarter ? 'steveThreeQuarterAir' : 'steveSideAir')
+    : (useThreeQuarter ? 'steveThreeQuarterGround' : 'steveSideGround');
+  const size = airborne ? 126 : 116;
+  const drawY = player.y - (player.z + player.surfaceLift);
+  const bob = recovering ? 2 : (!airborne && player.speed > 100 ? Math.sin(performance.now() / 85) * 1.5 : 0);
+
+  ctx.save();
+  ctx.fillStyle = 'rgba(38, 49, 55, 0.28)';
+  ctx.beginPath();
+  ctx.ellipse(player.x, player.y + 11, player.radius * 1.45 * Math.max(0.5, 1 - player.z / 260), player.radius * 0.65 * Math.max(0.5, 1 - player.z / 260), 0, 0, Math.PI * 2);
+  ctx.fill();
+  if (player.speed > 150 && !airborne) {
+    ctx.strokeStyle = '#f8c46a99';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(player.x - Math.cos(player.heading) * 42, player.y + 8);
+    ctx.lineTo(player.x - Math.cos(player.heading) * 70, player.y + 8);
+    ctx.stroke();
+  }
+  const loaded = drawVisualAsset(assetName, player.x - size / 2, drawY - size * 0.82 + bob, size, size, { flipX: facingLeft });
+  ctx.restore();
+  if (!loaded) drawProceduralSlothSprite();
+}
+
 function drawPlayer() {
-  drawSlothSprite();
+  drawAuthoredSteveSprite();
 }
 
 function drawOverlay() {
   if (game.mode === 'hub') {
+    const steps = [
+      ['ollie', 'Ollie'],
+      ['spin', 'Spin'],
+      ['landing', 'Land']
+    ];
+    const completed = steps.filter(([key]) => game.objective[key]).length;
+    ctx.fillStyle = 'rgba(5, 9, 15, 0.8)';
+    ctx.fillRect(18, canvas.height - 72, 430, 48);
+    ctx.fillStyle = '#f1f5ff';
+    ctx.font = '16px sans-serif';
+    ctx.fillText(`Practice line ${completed}/3: ${steps.find(([key]) => !game.objective[key])?.[1] ?? 'Complete'} | Ticket: ${Math.floor(game.score)}/${HUB_TUNING.practiceScoreGoal}`, 30, canvas.height - 42);
     const nearZone = getCurrentZone();
     if (nearZone) {
       ctx.fillStyle = 'rgba(5, 9, 15, 0.8)';
@@ -1237,13 +1521,16 @@ function drawOverlay() {
 }
 
 function renderHub() {
-  const cameraX = Math.max(0, Math.min(world.width - canvas.width, player.x - canvas.width / 2));
-  const cameraY = Math.max(0, Math.min(world.height - canvas.height, player.y - canvas.height / 2));
-  game.cameraX = cameraX;
-  game.cameraY = cameraY;
+  const lookAheadX = player.vx * 0.32;
+  const lookAheadY = player.vy * 0.32;
+  const targetX = Math.max(0, Math.min(world.width - canvas.width, player.x - canvas.width / 2 + lookAheadX));
+  const targetY = Math.max(0, Math.min(world.height - canvas.height, player.y - canvas.height / 2 + lookAheadY));
+  const damping = 1 - Math.exp(-8 * Math.min(0.033, 1 / 60));
+  game.cameraX += (targetX - game.cameraX) * damping;
+  game.cameraY += (targetY - game.cameraY) * damping;
 
   ctx.save();
-  ctx.translate(-cameraX, -cameraY);
+  ctx.translate(-game.cameraX, -game.cameraY);
   drawHubWorld();
   drawPlayer();
   ctx.restore();
