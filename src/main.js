@@ -352,6 +352,7 @@ const HUB_SPAWN = { x: 1040, y: 860 };
 
 
 
+
 let lastTime = performance.now();
 
 window.addEventListener('keydown', (event) => {
@@ -1126,9 +1127,17 @@ function drawVisualAsset(name, x, y, width, height, options = {}) {
   if (options.flipX) {
     ctx.translate(x + width, y);
     ctx.scale(-1, 1);
-    ctx.drawImage(image, 0, 0, width, height);
+    if (options.cropBottom) {
+      ctx.drawImage(image, 0, 0, image.width, image.height * options.cropBottom, 0, 0, width, height * options.cropBottom);
+    } else {
+      ctx.drawImage(image, 0, 0, width, height);
+    }
   } else {
-    ctx.drawImage(image, x, y, width, height);
+    if (options.cropBottom) {
+      ctx.drawImage(image, 0, 0, image.width, image.height * options.cropBottom, x, y, width, height * options.cropBottom);
+    } else {
+      ctx.drawImage(image, x, y, width, height);
+    }
   }
   ctx.restore();
   return true;
@@ -1696,7 +1705,7 @@ function drawAuthoredSteveSprite() {
     assetName = towardCamera ? 'steveFront' : 'steveBack';
   }
   const size = airborne ? 126 : 116;
-  const anchor = renderPlayerAnchor ?? { x: player.x, y: player.y };
+  const anchor = renderPlayerAnchor ?? { x: player.x, y: player.y - (player.z + player.surfaceLift) };
   const drawY = anchor.y;
   const bob = recovering ? 2 : (!airborne && player.speed > 100 ? Math.sin(performance.now() / 85) * 1.5 : 0);
 
@@ -1713,7 +1722,11 @@ function drawAuthoredSteveSprite() {
     ctx.lineTo(anchor.x - Math.cos(player.heading) * 70, anchor.y + 8);
     ctx.stroke();
   }
-  const loaded = drawVisualAsset(assetName, anchor.x - size / 2, drawY - size * 0.82 + bob, size, size, { flipX: facingLeft });
+  const isSkateboard = getCurrentRide().key === 'skateboard';
+  const loaded = drawVisualAsset(assetName, anchor.x - size / 2, drawY - size * 0.82 + bob, size, size, {
+    flipX: facingLeft,
+    cropBottom: isSkateboard ? undefined : 0.82
+  });
   if (loaded && getCurrentRide().key !== 'skateboard') {
     drawRideEquipment(anchor.x, drawY + bob, getCurrentRide().key, size, facingLeft);
   }
@@ -1767,6 +1780,21 @@ function drawRideEquipment(x, y, rideKey, size, facingLeft) {
 
 function drawPlayer() {
   drawAuthoredSteveSprite();
+}
+
+function drawForegroundOccluders() {
+  const candidates = [...world.buildings, ...world.parkedCars];
+  for (const object of candidates) {
+    const insideDepth = player.x >= object.x - player.radius &&
+      player.x <= object.x + object.w + player.radius &&
+      player.y <= object.y + object.h + player.radius;
+    if (!insideDepth) continue;
+    if (world.buildings.includes(object)) {
+      drawProjectedBox(object, Math.min(120, 55 + object.h * 0.18), object.color);
+    } else {
+      drawProjectedBox(object, 18, object.color, '#bce9df');
+    }
+  }
 }
 
 function drawOverlay() {
@@ -1862,8 +1890,9 @@ function renderHub() {
   drawDimensionalHubObjects();
 
   const playerPoint = projectHubPoint(player.x, player.y, player.z + player.surfaceLift);
-  renderPlayerAnchor = { x: playerPoint.x - game.cameraX, y: playerPoint.y - game.cameraY };
+  renderPlayerAnchor = { x: playerPoint.x, y: playerPoint.y };
   drawPlayer();
+  drawForegroundOccluders();
   renderPlayerAnchor = null;
 }
 
